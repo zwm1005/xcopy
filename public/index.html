@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="随传：无需安装、无需账号，在配对的电脑之间传递文字、截图和小文件。配对一次，长期互传。">
+<title>随传 · 随手一传，换台继续</title>
+<link rel="icon" href="/icon.svg?v=20261018-brand" type="image/svg+xml">
+<link rel="stylesheet" href="/home.css?v=20261018-typewriter-loop">
+<script type="module" src="/home.js"></script>
+</head>
+<body>
+<svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
+  <symbol id="i-up-right" viewBox="0 0 24 24"><path d="M6 18 18 6M6 6h12v12"/></symbol>
+  <symbol id="i-laptop" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="13" rx="2"/><path d="m4 16-2 4h20l-2-4"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="13" rx="2"/><path d="M12 16v5m-5 0h10"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="m10 13 4-4m-6 6-2 2a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m4 2 2-2a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0" transform="translate(1 0)"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="m3 13 4-8h10l4 8v6H3zm0 0h5l2 3h4l2-3h5"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.5"/><path d="m21 16-5-5-7 10"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H5v20h14V7zm0 0v5h5M8 12h8m-8 4h6"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+</svg>
+<div class="home">
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="随传首页"><svg class="brand-mark" viewBox="0 0 128 84" aria-hidden="true"><use href="/icon.svg?v=20261018-brand#mark"/></svg><span class="brand-name">随传<small>XCOPY</small></span></a>
+    <nav aria-label="首页导航"><a class="quiet-link how-link" href="#how">如何使用</a><a class="quiet-link faq-link" href="#questions">常见问题</a><a class="button header-start" href="/transfer">打开随传 <svg class="icon" aria-hidden="true"><use href="#i-up-right"/></svg></a></nav>
+  </header>
+  <main>
+    <section class="hero" aria-labelledby="home-title">
+      <p class="eyebrow">你的电脑之间，一点就到。</p>
+      <h1 id="home-title" aria-label="这边复制，那边继续。"><span class="typewriter-line typewriter-first" aria-hidden="true"><span class="typewriter-text">这边复制，</span><span class="typewriter-cursor">_</span></span><br><span class="typewriter-line typewriter-last" aria-hidden="true"><span class="typewriter-text">那边继续。</span><span class="typewriter-cursor">_</span></span></h1>
+      <p class="hero-description">一段文字、一张截图、一个文件。<br>无需安装，打开网页就能传到另一台电脑。</p>
+      <div class="hero-actions"><a class="button" href="/transfer">开始传输 <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></div>
+      <p class="hero-note">无需账号 · 配对一次，长期互传</p>
+    </section>
+    <section class="demo" id="demo" aria-label="传输过程演示" data-demo>
+      <div class="demo-toolbar">
+        <div class="demo-tabs" role="tablist" aria-label="演示内容类型">
+          <button type="button" id="tab-text" role="tab" aria-controls="demo-panel" aria-selected="true" data-type="text">文字</button>
+          <button type="button" id="tab-image" role="tab" aria-controls="demo-panel" aria-selected="false" tabindex="-1" data-type="image">截图</button>
+          <button type="button" id="tab-file" role="tab" aria-controls="demo-panel" aria-selected="false" tabindex="-1" data-type="file">文件</button>
+        </div>
+        <button type="button" class="playback" data-playback aria-label="暂停演示" hidden><svg class="icon" aria-hidden="true"><use href="#i-pause"/></svg><span data-playback-label>自动演示</span></button>
+      </div>
+      <div class="demo-flow" id="demo-panel" role="tabpanel" aria-labelledby="tab-text" data-phase="ready">
+        <div class="device-window">
+          <div class="window-bar"><span><svg class="icon" aria-hidden="true"><use href="#i-laptop"/></svg>我的 MacBook</span><span class="window-dots" aria-hidden="true"><b></b><b></b><b></b></span></div>
+          <div class="composer"><div class="demo-content" data-send-content>会议改到下午三点，<br>记得带上修改后的方案。</div><div class="send-row"><span class="device-target"><svg class="icon" aria-hidden="true"><use href="#i-link"/></svg>办公电脑 · 已配对</span><button type="button" class="button demo-send" data-demo-send hidden><span data-send-label>发送</span><svg class="icon" aria-hidden="true"><use href="#i-up-right"/></svg></button></div></div>
+        </div>
+        <div class="connector" aria-hidden="true"><svg class="icon"><use href="#i-arrow"/></svg><span class="travel-dot"></span></div>
+        <div class="device-window">
+          <div class="window-bar"><span><svg class="icon" aria-hidden="true"><use href="#i-monitor"/></svg>办公电脑</span><span>在线</span></div>
+          <div class="inbox"><div class="inbox-empty" data-empty><svg class="icon" aria-hidden="true"><use href="#i-inbox"/></svg><span data-empty-label>已准备好接收</span><small>发送后，内容会出现在这里。</small></div><div class="received" data-received hidden><span class="receipt-label"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>已收到 · 来自我的 MacBook</span><div class="receipt-content" data-received-content></div></div></div>
+        </div>
+      </div>
+      <div class="demo-foot"><span>交互演示，不会实际传输</span><span>真正使用时，两台电脑都需打开随传。</span></div>
+      <span class="sr-only" data-demo-announcement role="status" aria-live="polite"></span>
+      <noscript><p class="no-script">开启 JavaScript 可播放传输演示；使用随传也需要浏览器支持 JavaScript。</p></noscript>
+    </section>
+    <section class="steps" id="how" aria-label="如何使用随传">
+      <div class="step"><span class="step-number">01</span><h2>两台电脑，打开随传</h2><p>用浏览器访问同一个网址。<br>不用安装，也不用注册。</p></div>
+      <div class="step"><span class="step-number">02</span><h2>输入连接码，确认配对</h2><p>使用 8 位连接码发起邀请。<br>对方确认后，成为常用设备。</p></div>
+      <div class="step"><span class="step-number">03</span><h2>以后，直接选设备发送</h2><p>配对关系长期保留。<br>下次打开，不必重新输入连接码。</p></div>
+    </section>
+    <section class="questions" id="questions" aria-labelledby="privacy-title">
+      <div class="privacy-intro"><h2 id="privacy-title">连上的，<br>都是你认可的设备。</h2><p>优先 P2P 点对点直传，无法直连时中转。<br>中转服务器只转发，不留存文件内容。</p></div>
+      <div class="faq-list">
+        <details><summary>连接码更新，还能继续传吗？</summary><p>可以。连接码只用于发起新配对，更新或过期不会解除已有配对。配对关系长期保留，只有手动忘记才会解除。忘记设备前，双方的传输任务需先结束。</p></details>
+        <details><summary>重新打开浏览器，需要重新配对吗？</summary><p>同一浏览器配置、同一网址且站点数据保留时，一般不需要。换浏览器、换配置或清除站点数据后，需要重新配对。</p></details>
+        <details><summary>内容会保存在哪里？</summary><p>文字、截图和文件优先通过 P2P 在两台设备之间点对点直传。无法直连时（例如打洞失败），才通过服务器中转；中转服务器只负责转发，不保存或留存任何文件内容。</p><p>收到的内容暂存在接收端当前页面中。刷新或关闭页面前，请保存需要的文件、复制需要的文字。</p><p>为记住已配对设备，服务端会保存设备信息和配对关系，但不保存传输内容。</p></details>
+        <details><summary>不在同一个 Wi-Fi 下，也能传吗？</summary><p>可以。随传优先尝试 P2P 点对点直传，打洞失败、无法直连时使用服务器中转，中转不留存文件。双方需要联网，并保持随传的传输页打开。</p></details>
+        <details><summary>文件大小有限制吗？</summary><p>单个文件上限 50 MiB，一次最多 8 个。传输期间请保持双方的传输页打开。</p></details>
+      </div>
+    </section>
+  </main>
+  <footer class="site-footer"><span>随传 · xcopy.werfamily.fun</span><span>随手一传，换台继续。</span></footer>
+</div>
+<template id="content-text">会议改到下午三点，<br>记得带上修改后的方案。</template>
+<template id="content-image"><div class="file-item"><span class="file-icon"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg></span><div><strong>刚刚的截图.png</strong><small>图片 · 428 KB</small></div></div></template>
+<template id="content-file"><div class="file-item"><span class="file-icon"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg></span><div><strong>首页修改说明.pdf</strong><small>PDF 文档 · 1.2 MB</small></div></div></template>
+</body>
+</html>

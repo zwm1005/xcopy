@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="随传：在已配对的电脑间安全传递文字、截图和小文件。">
+<title>随传 · 跨设备快传</title>
+<link rel="icon" href="/icon.svg?v=20261018-brand" type="image/svg+xml">
+<link rel="stylesheet" href="/styles.css?v=20261018-broadcast">
+<script type="module" src="/app.js?v=20261018-broadcast"></script>
+</head>
+<body>
+<div id="suichuan" aria-label="随传 · 跨设备快传">
+  
+  <div class="qt-app">
+    <header class="qt-header">
+      <div class="qt-brand" aria-label="随传"><svg class="qt-brand-mark" viewBox="0 0 128 84" aria-hidden="true"><use href="/icon.svg?v=20261018-brand#mark"/></svg><span class="qt-brand-name">随传<small>XCOPY</small></span></div>
+      <div class="qt-header-actions">
+        <button type="button" class="qt-button qt-quiet cursor-interaction" data-action="devices"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="12" rx="2"/><path d="m4 15-3 5h22l-3-5"/></svg><span data-local-name>我的电脑</span></button>
+        <button type="button" class="qt-button qt-outline cursor-interaction" data-action="connect"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>连接设备</button>
+      </div>
+    </header>
+
+    <main class="qt-main">
+      <section class="qt-intro">
+        <h1 aria-label="传点什么？"><span class="typewriter-line" aria-hidden="true"><span class="typewriter-text">传点什么？</span><span class="typewriter-cursor">_</span></span></h1>
+      </section>
+
+      <section class="qt-composer" aria-label="发送内容">
+        <div class="qt-drop-hint" hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M3 16v5h18v-5"/></svg><span>松开以添加</span></div>
+        <textarea data-editor aria-label="要发送的文字" placeholder="粘贴文字、截图，或拖入文件" spellcheck="false"></textarea>
+        <div class="qt-attachments" data-attachments hidden></div>
+        <div class="qt-compose-footer">
+          <div class="qt-compose-tools">
+            <button type="button" class="qt-button qt-icon qt-quiet cursor-interaction" data-action="pick" aria-label="添加附件" data-tooltip="添加附件"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
+            <label class="qt-target-picker"><select aria-label="接收设备" class="cursor-interaction" data-target></select></label>
+          </div>
+          <button type="button" class="qt-button qt-primary qt-send cursor-interaction" data-action="send" aria-label="发送" data-tooltip="发送" disabled><span data-send-label hidden></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
+        </div>
+        <input type="file" data-files multiple hidden aria-label="选择发送的文件">
+      </section>
+      <p class="qt-send-note" data-send-note hidden></p>
+
+      <section class="qt-transfers" aria-label="本次传输">
+        <div class="qt-section-heading"><h2>本次传输 <span data-count></span></h2><span class="qt-connection"><span class="qt-status-dot"></span><span data-connection>正在连接</span></span></div>
+        <div data-transfers></div><div class="qt-history-footer"><span>记录仅保留在当前页面</span><button type="button" class="qt-text-button" data-action="clear" hidden>清空已结束记录</button></div>
+      </section>
+    </main>
+
+    <div class="qt-toast" role="status" aria-live="polite" hidden></div>
+    <div class="qt-overlay" hidden>
+      <section class="qt-dialog" role="dialog" aria-modal="true" aria-label="连接设备">
+        <div class="qt-dialog-top"><h2 data-dialog-title>连接设备</h2><button type="button" class="qt-button qt-icon qt-quiet cursor-interaction" data-action="close" aria-label="关闭弹层"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></div>
+        <div data-pair-panel>
+          <div class="qt-segments" role="tablist" aria-label="连接方式">
+            <button type="button" role="tab" aria-selected="true" class="cursor-interaction" data-pair-tab="show" id="qt-show-tab" aria-controls="qt-code-panel">我的连接码</button>
+            <button type="button" role="tab" aria-selected="false" class="cursor-interaction" data-pair-tab="enter" id="qt-enter-tab" aria-controls="qt-enter-panel">输入连接码</button>
+          </div>
+          <div id="qt-code-panel" role="tabpanel" aria-labelledby="qt-show-tab">
+            <p class="qt-dialog-description">在另一台设备输入</p>
+            <div class="qt-code" data-code></div>
+            <div class="qt-code-meta"><span data-code-expiry>10 分钟后失效</span><button type="button" class="qt-text-button cursor-interaction" data-action="refresh-code">换一个</button></div>
+            <button type="button" class="qt-button qt-primary qt-full cursor-interaction" data-action="copy-code"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V3H3v13h5"/></svg>复制</button>
+          </div>
+          <div id="qt-enter-panel" role="tabpanel" aria-labelledby="qt-enter-tab" hidden>
+            <input class="qt-code-input" data-code-input inputmode="numeric" type="text" autocomplete="off" maxlength="11" placeholder="0000 0000" aria-label="8 位连接码" aria-describedby="qt-code-error">
+            <p class="qt-input-error" id="qt-code-error" role="alert" hidden></p>
+            <button type="button" class="qt-button qt-primary qt-full cursor-interaction" data-action="join" data-join>连接<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>
+          </div>
+        </div>
+        <div data-approval-panel hidden>
+          <div class="qt-request-device"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="13" rx="2"/><path d="M12 16v5m-5 0h10"/></svg><strong data-request-name>新设备</strong><span data-request-id>请求连接</span></div>
+          <p class="qt-dialog-description qt-center">允许这台设备连接？</p>
+          <div class="qt-request-actions"><button type="button" class="qt-button qt-outline cursor-interaction" data-action="deny">拒绝</button><button type="button" class="qt-button qt-primary cursor-interaction" data-action="allow">允许并记住</button></div>
+        </div>
+        <div data-devices-panel hidden>
+          <label class="qt-field-label" for="qt-local-name">本机名称</label>
+          <div class="qt-name-form"><input id="qt-local-name" data-name-input maxlength="24" type="text"><button type="button" class="qt-button qt-outline cursor-interaction" data-action="rename">保存</button></div>
+          <h3 class="qt-devices-heading">已配对设备</h3>
+          <div data-devices-list></div>
+        </div>
+      </section>
+    </div>
+    <dialog class="qt-image-preview" data-image-preview aria-label="图片预览" aria-describedby="qt-preview-name">
+      <button type="button" class="qt-preview-close" data-action="close-image" aria-label="关闭图片预览" autofocus><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
+      <img class="qt-preview-image" data-preview-image alt="">
+      <p class="qt-preview-name" id="qt-preview-name" data-preview-name></p>
+    </dialog>
+  </div>
+</div>
+
+
+</body>
+</html>

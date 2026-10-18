@@ -1,0 +1,28 @@
+[Unit]
+Description=Suichuan cross-device transfer control service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=suichuan
+Group=suichuan
+WorkingDirectory=/opt/suichuan/current
+EnvironmentFile=/etc/suichuan/app.env
+ExecStart=/opt/suichuan/runtime/node/bin/node server/index.js
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+StateDirectory=suichuan
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/suichuan
+MemoryMax=256M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <path id="ribbon" d="M0 29h10c7 0 11-2 16-7L42 6c4-4 9-6 15-6h28c11 0 19 8 19 18v2H73c-7 0-11 3-16 8L41 44c-5 5-10 8-17 8h-6C8 52 0 44 0 34Z"/>
+    <symbol id="mark" viewBox="0 0 128 84">
+      <use href="#ribbon"/>
+      <use href="#ribbon" x="24" y="32"/>
+    </symbol>
+  </defs>
+  <rect width="128" height="128" rx="30" fill="#202020"/>
+  <use href="#mark" x="16" y="32.5" width="96" height="63" fill="#fff"/>
+</svg>

@@ -1,0 +1,25 @@
+[Unit]
+Description=Dedicated TURN relay for Suichuan
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=suichuan-turn
+Group=suichuan-turn
+ExecStart=/usr/bin/turnserver -c /etc/suichuan/turnserver.conf
+Restart=on-failure
+RestartSec=3
+RuntimeDirectory=suichuan-turn
+RuntimeDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run/suichuan-turn
+MemoryMax=192M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target
