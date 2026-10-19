@@ -196,13 +196,55 @@ test('share creation retries recover the same link without reserving a second sh
   assert.equal((await sender.rpc('share.list')).shares.length, 1);
 });
 
+test('direct files have no fixed size cap; TURN credentials and relay candidates are excluded above the relay boundary', async (t) => {
+  const { connect } = await setup(t, { stunUrls: ['stun:stun.example:3478'], turnUrls: ['turn:turn.example:3478'], turnSecret: 'a'.repeat(32) });
+  const a = await connect('发送者');
+  const b = await connect('接收者');
+  await pair(a, b);
+  const relay = 'candidate:1 1 udp 1 192.0.2.1 50000 typ relay raddr 0.0.0.0 rport 0';
+  const host = 'candidate:2 1 udp 2 192.0.2.2 50001 typ host';
+  for (const size of [50 * 1048576, 50 * 1048576 + 1, 5 * 1024 ** 3]) {
+    const directOnly = size > 50 * 1048576;
+    const started = await a.rpc('transfer.start', { peerId: b.id, metadata: { ...metadata, size } });
+    const offer = await b.event('transfer.offer', (value) => value.id === started.id);
+    for (const value of [started, offer]) {
+      assert.equal(value.directOnly, directOnly);
+      assert.equal(value.maxRelayFileBytes, 50 * 1048576);
+      assert.equal(value.iceServers.some((server) => server.urls.some((url) => url.startsWith('turn:'))), !directOnly);
+    }
+    await b.rpc('transfer.accept', { id: started.id });
+    await a.rpc('signal', { id: started.id, signal: { description: { type: 'offer', sdp: `v=0\r\na=${relay}\r\na=${host}\r\n` } } });
+    const signalled = await b.event('signal', (value) => value.id === started.id);
+    assert.equal(signalled.signal.description.sdp.includes('typ relay'), !directOnly);
+    await a.rpc('signal', { id: started.id, signal: { candidate: { candidate: relay } } });
+    await a.rpc('signal', { id: started.id, signal: { candidate: { candidate: host } } });
+    const candidate = await b.event('signal', (value) => value.id === started.id);
+    assert.equal(candidate.signal.candidate.candidate, directOnly ? host : relay);
+    await a.rpc('transfer.end', { id: started.id, status: 'failed', reasonCode: 'RELAY_SIZE_LIMIT' });
+    const state = await b.event('transfer.state', (value) => value.id === started.id);
+    assert.equal(state.reason.includes('50 MB'), directOnly);
+  }
+  const share = await a.rpc('share.create', { files: [{ ...metadata, size: 5 * 1024 ** 3 }, ...Array(4).fill({ ...metadata, size: 50 * 1048576 })], minutes: 10 });
+  assert.equal(share.totalBytes, 5 * 1024 ** 3 + 200 * 1048576);
+  const recipient = await guest(connect);
+  await recipient.rpc('share.claim', { token: share.token });
+  const large = await a.rpc('share.file.start', { id: share.id, index: 0 });
+  assert.equal(large.directOnly, true);
+  assert.equal(large.iceServers.length, 1);
+  await a.rpc('transfer.end', { id: large.id, status: 'failed', reasonCode: 'RELAY_SIZE_LIMIT' });
+  assert.match((await recipient.rpc('share.inspect', { token: share.token })).myClaim.reason, /50 MB/);
+  const small = await a.rpc('share.file.start', { id: share.id, index: 1 });
+  assert.equal(small.directOnly, false);
+  assert.equal(small.iceServers.length, 2);
+});
+
 test('share cancellation, expiry and metadata limits are enforced on the server', async (t) => {
   let time = Date.now();
   const { connect, app } = await setup(t, { now: () => time });
   const sender = await connect('分享者');
   const outsider = await connect('其他设备');
   const a = await guest(connect);
-  for (const files of [[], Array(9).fill(metadata), [{ ...metadata, size: -1 }], [{ ...metadata, size: 51 * 1048576 }], Array(5).fill({ ...metadata, size: 50 * 1048576 })]) {
+  for (const files of [[], Array(9).fill(metadata), [{ ...metadata, size: -1 }], [{ ...metadata, size: Number.MAX_SAFE_INTEGER + 1 }], [{ ...metadata, size: 1.5 }]]) {
     await rejected(sender.rpc('share.create', { files, minutes: 10 }), 'SIZE_LIMIT');
   }
   await rejected(sender.rpc('share.create', { files: [metadata], minutes: 0 }), 'INVALID');
@@ -467,7 +509,7 @@ test('a new server instance reads persisted relationships and names; limits and 
   const b2 = await second.connect('ignored', b.keys);
   assert.equal(a2.authResult.device.name, '办公电脑');
   assert.equal((await a2.rpc('peers.list')).peers[0].id, b2.id);
-  await rejected(a2.rpc('transfer.start', { peerId: b2.id, metadata: { ...metadata, size: 51 * 1048576 } }), 'SIZE_LIMIT');
+  await rejected(a2.rpc('transfer.start', { peerId: b2.id, metadata: { ...metadata, size: -1 } }), 'SIZE_LIMIT');
   const response = await fetch(`http://127.0.0.1:${second.address.port}/data/suichuan.sqlite`);
   assert.equal(response.status, 404);
 });

@@ -1,5 +1,6 @@
 const terminal = new Set(['completed', 'cancelled', 'expired', 'unavailable', 'stopped']);
 export const sizeLabel = (n) => n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`;
+export const fileLimitLabel = (config) => `最多 8 个文件 · P2P 直连不限大小；服务器中转单个不超过 ${sizeLabel(config?.maxRelayFileBytes || config?.maxFileBytes || 50 * 1048576)}`;
 export function el(tag, className = '', text) {
   const node = document.createElement(tag);
   node.className = className;
@@ -323,24 +324,24 @@ export class ShareComposer {
       pick.append(this.root.querySelector('[data-action="pick"] svg').cloneNode(true));
       pick.disabled = this.busy;
       pick.dataset.shareControl = 'pick-files';
-      const tools = el('div', 'qt-compose-footer');
+      const footer = el('div', 'qt-compose-footer');
+      const tools = el('div', 'qt-compose-tools');
       tools.append(pick);
-      upload.append(tools);
-      this.panel.append(upload, el('p', 'share-limit', `最多 8 个文件 · P2P 直连不限大小；服务器中转单个不超过 ${sizeLabel(this.connection.config?.maxRelayFileBytes || this.connection.config?.maxFileBytes || 50 * 1048576)}`));
-
       const total = files.reduce((sum, f) => sum + f.file.size, 0);
-      const actions = el('div', 'share-compose-actions');
       if (files.length) {
-        actions.append(el('span', 'share-muted share-small', `${files.length} 个文件 · ${sizeLabel(total)}`));
+        tools.append(el('span', 'share-muted share-small', `${files.length} 个文件 · ${sizeLabel(total)}`));
       }
       const generate = action(this.busy ? '正在创建…' : '创建分享', () => this.create(), true);
+      generate.classList.add('qt-send', 'share-create');
       generate.disabled = this.busy || !this.connection.ready || !files.length || this.active();
       generate.dataset.shareControl = 'generate';
       generate.dataset.shareGenerate = '';
-      actions.append(generate);
+      footer.append(tools, generate);
+      upload.append(footer);
+      this.panel.append(upload, el('p', 'share-limit', fileLimitLabel(this.connection.config)));
       const description = el('p', 'share-mode-description', this.shareMode === 'multiple' ? '已开启多人领取，有效期内可供多人接收。' : '默认一次领取，接收完成后链接失效。多人领取可在更多设置中开启。');
       description.dataset.shareDescription = '';
-      this.panel.append(actions, description);
+      this.panel.append(description);
 
       const settings = el('details', 'share-settings');
       settings.dataset.shareSettings = '';
@@ -466,7 +467,7 @@ export class ShareComposer {
       } else if (selected.status === 'claimed') {
         const items = this.transfers.items.filter((i) => i.shareId === selected.id);
         this.panel.append(progressNode(items, selected.totalBytes, selected.files.filter((f) => f.completed).length, selected.files.length));
-        this.panel.append(el('p', 'share-description', items.some((i) => i.status === 'failed') ? '连接中断，等待原接收页面重试。其他人无法领取。' : '对方正在领取，请保持页面打开。全部文件校验完成后，链接自动失效。'));
+        this.panel.append(el('p', 'share-description', items.find((i) => i.status === 'failed')?.reason || (items.some((i) => i.status === 'failed') ? '连接中断，等待原接收页面重试。其他人无法领取。' : '对方正在领取，请保持页面打开。全部文件校验完成后，链接自动失效。')));
       }
       const footer = el('div', 'share-footer');
       const cancel = action(selected.mode === 'multiple' ? '结束并中断' : '取消分享', async () => {

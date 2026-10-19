@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Transfers } from '../public/transfer.js';
 
@@ -178,4 +179,49 @@ test('cancelling one queued item never sends it later', async (t) => {
   assert.equal(connection.starts.length, 5);
   assert.equal(queued.status, 'cancelled');
   assert.equal(queued.id, undefined);
+});
+
+test('files are read and checked in bounded blocks with the original SHA-256 wire format', async (t) => {
+  const { transfers } = setup(t);
+  const content = Buffer.alloc(3 * 1048576 + 79, 173);
+  const file = new File([content], '大文件.bin');
+  file.arrayBuffer = () => { throw new Error('不应一次读取整个文件'); };
+  const messages = [];
+  const sender = transfers.queuedItem(peers[0], { kind: 'file', file });
+  sender.status = 'transferring';
+  sender.channel = { bufferedAmount: 0, send: (data) => messages.push(typeof data === 'string' ? data : Buffer.from(data)) };
+  await transfers.sendBytes(sender);
+  const end = JSON.parse(messages.pop());
+  assert.equal(end.hash, createHash('sha256').update(content).digest('hex'));
+  assert.ok(messages.every((chunk) => chunk.byteLength <= 16384));
+  assert.deepEqual(Buffer.concat(messages), content);
+  await transfers.receive({ id: 'receive-large', peerId: 'b', metadata: { kind: 'file', name: file.name, size: file.size, mime: file.type }, iceServers: [] });
+  const receiver = transfers.byId.get('receive-large');
+  receiver.channel = { send() {}, readyState: 'open' };
+  for (const chunk of messages) {
+    await transfers.message(receiver, chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength));
+    assert.ok(receiver.chunkBytes < 1048576);
+  }
+  await transfers.message(receiver, JSON.stringify(end));
+  assert.equal(receiver.status, 'completed');
+  assert.equal(receiver.verified, true);
+  assert.deepEqual(Buffer.from(await receiver.blob.arrayBuffer()), content);
+});
+
+test('large incoming files are accepted for direct transfer but never send data over a relay route', async (t) => {
+  const { connection, transfers } = setup(t);
+  await transfers.receive({ id: 'unlimited', peerId: 'b', metadata: { kind: 'file', name: '5GiB.bin', size: 5 * 1024 ** 3 }, iceServers: [] });
+  const incoming = transfers.byId.get('unlimited');
+  assert.equal(incoming.status, 'waiting');
+  assert.equal(incoming.directOnly, true);
+  const file = new File(['x'], 'large.bin');
+  const outgoing = transfers.queuedItem(peers[0], { kind: 'file', file });
+  outgoing.directOnly = true;
+  outgoing.pc = { sctp: { transport: { iceTransport: { getSelectedCandidatePair: () => ({ local: { type: 'relay' }, remote: { type: 'host' } }) } } } };
+  await assert.rejects(transfers.openChannel(outgoing), { code: 'RELAY_SIZE_LIMIT' });
+  assert.equal(outgoing.bytes, 0);
+  await transfers.receive({ id: 'forced', peerId: 'b', metadata: { kind: 'file', name: 'large.bin', size: 50 * 1048576 + 1 }, iceServers: [], forceRelay: true });
+  assert.equal(transfers.byId.get('forced').status, 'failed');
+  assert.match(transfers.byId.get('forced').reason, /50 MB/);
+  assert.ok(connection.ends.some((entry) => entry.id === 'forced' && entry.reasonCode === 'RELAY_SIZE_LIMIT'));
 });

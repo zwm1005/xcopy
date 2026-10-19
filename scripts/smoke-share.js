@@ -1,5 +1,5 @@
 import { chromium, expect as baseExpect } from '@playwright/test';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { PNG } from 'pngjs';
@@ -8,6 +8,10 @@ import jsQR from 'jsqr';
 const expect = baseExpect.configure({ timeout: 20000 });
 const origin = new URL(process.argv[2] || 'https://xcopy.werfamily.fun').origin;
 const relay = process.argv.includes('--relay');
+const large = process.argv.includes('--large');
+if (relay && large) {
+  throw new Error('大文件验收需要使用 P2P 直连');
+}
 if (!origin.startsWith('https://') && !origin.startsWith('http://localhost:')) {
   throw new Error('验收只接受 HTTPS 或 localhost');
 }
@@ -48,8 +52,17 @@ try {
   await sender.goto(`${origin}/transfer`);
   await expect(sender.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready');
   await sender.getByRole('tab', { name: '链接分享', exact: true }).click();
-  const files = Array.from({ length: 8 }, (_, i) => ({ name: i === 0 ? '分享验收 中文.txt' : `share-${i}.bin`, mimeType: 'application/octet-stream', buffer: i === 7 ? Buffer.alloc(0) : Buffer.alloc(i === 6 ? 2 * 1048576 : 2048, i + 25) }));
-  await sender.locator('[data-files]').setInputFiles(files);
+  const files = Array.from({ length: 8 }, (_, i) => ({ name: i === 0 ? '分享验收 中文.txt' : `share-${i}.bin`, mimeType: 'application/octet-stream', buffer: i === 7 ? Buffer.alloc(0) : Buffer.alloc(i === 6 ? (large ? 51 : 2) * 1048576 : 2048, i + 25) }));
+  let inputFiles = files;
+  if (large) {
+    await mkdir(`${output}/fixtures`, { recursive: true });
+    inputFiles = await Promise.all(files.map(async (file) => {
+      const path = `${output}/fixtures/${file.name}`;
+      await writeFile(path, file.buffer);
+      return path;
+    }));
+  }
+  await sender.locator('[data-files]').setInputFiles(inputFiles);
   await sender.locator('[data-share-generate]').click();
   await expect(sender.locator('[data-share-url]')).toBeVisible();
   await sender.getByRole('tab', { name: '发送给设备', exact: true }).click();
@@ -93,7 +106,7 @@ try {
     expect(bytes).toEqual(files[i].buffer);
     verified.push({ name: files[i].name, bytes: bytes.length, sha256: hash(bytes) });
   }
-  checks.push('8 个文件下载字节一致，包含空文件、中文文件名和 2 MiB 二进制');
+  checks.push(`8 个文件下载字节一致，包含空文件、中文文件名和 ${large ? 51 : 2} MiB 二进制`);
   const zipEvent = recipient.waitForEvent('download');
   await recipient.locator('[data-save-all]').click();
   const zip = await zipEvent;
@@ -112,20 +125,20 @@ try {
   await recipient.screenshot({ path: `${output}/recipient-mobile.png`, fullPage: true });
   await sender.getByRole('button', { name: '创建新的分享' }).click();
   await expect(sender.locator('[data-share-generate]')).toBeDisabled();
-  await sender.locator('[data-files]').setInputFiles(files);
+  await sender.locator('[data-files]').setInputFiles(inputFiles);
   await sender.locator('[data-share-generate]').click();
   const cancelled = await sender.locator('[data-share-url]').inputValue();
   sender.once('dialog', (d) => d.accept());
   await sender.locator('[data-share-panel]').getByRole('button', { name: '取消分享', exact: true }).click();
   await expect(sender.locator('[data-share-generate]')).toBeDisabled();
-  await expect(sender.locator('.share-upload .share-file')).toHaveCount(0);
+  await expect(sender.locator('.share-upload .qt-attachment')).toHaveCount(0);
   await expect(sender.getByRole('button', { name: '创建新的分享' })).toHaveCount(0);
   await expect(sender.locator('[data-share-record][data-status="cancelled"]')).toBeVisible();
   checks.push('取消后直接显示空白分享表单，取消记录保留在历史记录');
   await other.goto(cancelled);
   await expect(other.getByRole('heading', { level: 1 })).toHaveText('分享已被取消');
   checks.push('新分享取消后无法领取，手机布局无横向溢出');
-  const report = { ok: true, origin, relay, timestamp: new Date().toISOString(), checks, files: verified, routes };
+  const report = { ok: true, origin, relay, large, timestamp: new Date().toISOString(), checks, files: verified, routes };
   await writeFile(`${output}/report.json`, JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report));
 } catch (error) {
@@ -134,4 +147,7 @@ try {
 } finally {
   await Promise.all(contexts.map((context) => context.close()));
   await browser.close();
+  if (large) {
+    await rm(`${output}/fixtures`, { recursive: true, force: true });
+  }
 }

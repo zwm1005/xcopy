@@ -1,6 +1,6 @@
 import { Connection } from './connection.js';
 import { Transfers } from './transfer.js';
-import { ShareComposer } from './share-ui.js?v=20261019-multiple-share';
+import { ShareComposer, fileLimitLabel } from './share-ui.js?v=20261019-multiple-share';
 import { deviceNames, validDeviceName } from './device-name.js';
 
 const root = document.querySelector('#suichuan');
@@ -133,6 +133,11 @@ function updateSend() {
   const note = get('[data-send-note]');
   note.textContent = !connection.ready ? state.connectionError : recipients.length && broadcast ? '发送给所有已配对且在线的设备' : '';
   note.hidden = shareUI?.mode === 'share' || !note.textContent;
+  const fileLimit = get('[data-device-file-limit]');
+  if (fileLimit) {
+    fileLimit.textContent = fileLimitLabel(connection.config);
+    fileLimit.hidden = shareUI?.mode === 'share';
+  }
   for (const connect of all('[data-action="connect"], [data-action="first-connect"]')) {
     connect.disabled = !connection.ready;
   }
@@ -186,17 +191,14 @@ function renderTransfers() {
   const count = transfers.items.filter((item) => !item.groupId && !item.shareId).length + transfers.groups.length + (shareUI?.entries.length || 0);
   const sharing = shareUI?.mode === 'share';
   const history = get('.qt-transfers');
-  const title = sharing ? '历史记录' : '本次传输';
-  history.hidden = sharing && count === 0;
+  const title = '历史记录';
+  history.hidden = count === 0;
   history.setAttribute('aria-label', title);
   get('.qt-section-heading h2').firstChild.textContent = `${title} `;
   get('[data-count]').textContent = count || '';
   get('[data-action="clear"]').hidden = !transfers.items.some((item) => !item.shareId && !isActive(item) && !activeGroups.has(item.groupId)) && !shareUI?.entries.some((s) => ['completed', 'cancelled', 'expired', 'unavailable', 'stopped'].includes(s.status));
   get('.qt-history-footer > span').hidden = sharing;
   get('.qt-history-footer').hidden = sharing && get('[data-action="clear"]').hidden;
-  if (!sharing && !transfers.items.length && !shareUI?.entries.length) {
-    list.append(element('p', 'qt-empty', '发出的内容和收到的内容会出现在这里'));
-  }
   const shown = new Set();
   for (const item of transfers.items) {
     if (item.shareId) {

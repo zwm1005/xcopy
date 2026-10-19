@@ -159,7 +159,7 @@ test('cancellation stops an active transfer and allows retry; forgetting is disa
     await a.page.evaluate(() => {
       const send = RTCDataChannel.prototype.send;
       RTCDataChannel.prototype.send = function (data) {
-        if (data instanceof ArrayBuffer) {
+        if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) {
           const start = performance.now();
           while (performance.now() - start < 2) {}
         }
