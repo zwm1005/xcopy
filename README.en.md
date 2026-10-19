@@ -1,54 +1,73 @@
-# XCopy
+# XCopy · 随传
 
-[简体中文](README.md)
+Send text, screenshots and files between devices. Open it in your browser, no account needed, or host it on your own server.
 
-Send text, screenshots and files between paired devices, or create a one-time or multi-recipient share link. WebRTC prefers direct connections and can use your own TURN relay. The application server stores device identities and pairings, never transferred content. Keep both pages open and save received files before closing them.
+[Try it online](https://xcopy.werfamily.fun/transfer?lang=en) · [简体中文](README.md) · [Contributing](CONTRIBUTING.md)
 
-## Run locally
+## Features
 
-Node.js 24 or newer is required.
+- **Device transfers** — Pair with a connection code, drag files, paste screenshots and send to multiple devices.
+- **Share links** — Share by link or QR code, with single or multiple recipients and ZIP downloads on the receiving end.
+- **Direct connections and relays** — WebRTC prefers direct connections and supports your own STUN / TURN services.
+- **Browser and CLI** — Chinese and English web interfaces, plus a Go CLI for devices without a desktop.
+
+## Quick start
+
+Requires **Node.js 24+**.
 
 ```sh
+git clone https://github.com/zwm1005/xcopy.git
+cd xcopy
 npm ci
 npm run build
 npm start
 ```
 
-Open http://localhost:8787. Use different browser profiles to simulate separate devices. `npm run dev` watches frontend sources and rebuilds; refresh after a successful build. `npm start` requires an existing complete build.
+Open [localhost:8787](http://localhost:8787). Open the transfer page on both devices, pair with an 8-digit code and approve the request. You can also share files by link without pairing the recipient.
 
-The frontend uses strict TypeScript, native HTML/CSS and browser ES modules. The backend remains JavaScript; the CLI remains Go. Chinese and English are included. Choose a language in the header. Selection order: `?lang=`, saved preference, browser languages, `DEFAULT_LOCALE`, Chinese. Switching does not reload the page or reset transfers, identities or drafts.
+Use separate browsers or browser profiles to test two devices locally. Run `npm run dev` for development and refresh after each successful build.
 
 ## Self hosting
 
-Copy `.env.example` to `.env`, set `PUBLIC_ORIGIN` to your HTTPS origin, and configure your own connectivity:
+Install Docker Compose, point your domain to the server and allow TCP ports 80 / 443.
 
-- STUN only: `STUN_URLS=stun:stun.example.com:3478`; leave TURN empty. This does not guarantee connectivity across restrictive networks.
-- Shared-secret TURN: set `TURN_URLS`, `TURN_AUTH_MODE=shared-secret`, and `TURN_SECRET` with at least 32 characters. Leave username/password empty.
-- Static TURN: set `TURN_AUTH_MODE=static`, `TURN_USERNAME`, `TURN_PASSWORD` and `TURN_URLS`; leave the secret empty. Credentials are delivered to authorized transfer clients, so use a dedicated restricted account.
+```sh
+cp .env.example .env
+```
 
-TURN examples: `turn:relay.example.com:3478?transport=udp`, `turn:relay.example.com:3478?transport=tcp`, or `turns:relay.example.com:5349?transport=tcp`. Lists are comma-separated. Bracket IPv6 addresses. No public fallback server is built in. `FORCE_RELAY=1` requires configured TURN. Shared-secret TTL defaults to 3600 seconds and accepts 3600–86400.
+Set `PUBLIC_ORIGIN` in `.env` to your HTTPS origin, such as `https://send.example.com`. Configure connectivity as needed:
+
+| Setting | Purpose |
+| --- | --- |
+| `STUN_URLS` | Comma-separated STUN URLs, e.g. `stun:stun.example.com:3478` |
+| `TURN_URLS` | Comma-separated TURN URLs, e.g. `turn:relay.example.com:3478?transport=udp` |
+| `TURN_AUTH_MODE=shared-secret`, `TURN_SECRET` | A secret of at least 32 characters matching the TURN server; leave username and password empty |
+| `TURN_AUTH_MODE=static`, `TURN_USERNAME`, `TURN_PASSWORD` | Alternatively, use a static account and leave `TURN_SECRET` empty |
+
+No public STUN / TURN fallback is built in. Without TURN, some networks cannot connect. Static credentials are delivered to authorized clients; use a dedicated, restricted account.
 
 ```sh
 docker compose config --quiet
 docker compose up -d --build
 ```
 
-The base deployment includes app and Caddy only. To run the bundled coturn on Linux, also set `TURN_EXTERNAL_IP`, `TURN_REALM`, matching `TURN_SECRET`, and point `TURN_URLS` at it:
+This starts the app and Caddy, which manages HTTPS. See the [deployment guide (Chinese)](CONTRIBUTING.md#部署与发布) for bundled coturn, systemd / Nginx and configuration updates.
 
-```sh
-docker compose -f compose.yaml -f compose.turn.yaml config --quiet
-docker compose -f compose.yaml -f compose.turn.yaml up -d --build
-```
+## Before you transfer
 
-Bundled coturn uses shared-secret authentication and host networking. Allow HTTPS and the configured TURN ports through your firewall. The app is single-instance; its SQLite volume retains pairings. Do not expose an app trusting forwarded headers directly to the internet.
+- Both devices must be online. Keep the sending page open while sharing. Refreshing or closing a page clears its history and unsaved received content. Offline delivery and resuming across reloads are not supported.
+- Browser direct transfers have no application-level file size limit, but remain constrained by device and browser resources. TURN defaults to **50 MiB per file**, configurable with `MAX_FILE_MB`. Larger files only attempt direct connections. The [CLI has its own limits](cli/README.md).
+- Pairings persist for the current browser profile. Clearing site data or ending a private session requires pairing again.
 
-ICE and language changes do not require a frontend rebuild. Restart local/systemd processes. For Compose, run `config --quiet` then `up -d --no-deps --force-recreate app`; `restart` does not reload environment variables. Keep the same `-f`, `-p` and `--env-file` options. To rotate bundled TURN secrets: stop app, update both configurations, recreate turn, then recreate app. Roll back both ends together. Process environment takes precedence over `.env` with npm; bare Node does not load `.env` automatically.
+## Security and privacy
 
-`/api/client-config` exposes only language and optional download settings. Node serves `/robots.txt` and `/sitemap.xml` using your origin. `/indexnow.txt` returns 404 unless `INDEXNOW_KEY` is configured (8–128 ASCII letters, digits or hyphens). External submission tools must set `keyLocation=<PUBLIC_ORIGIN>/indexnow.txt`. No automatic submissions occur. Reverse proxies must forward these endpoints to Node instead of serving legacy files.
+File content uses WebRTC DataChannels with **DTLS encryption**, including through TURN. The application server does not store file content, but processes device information, filenames and sizes. Receivers verify content integrity with SHA-256.
+
+The current model relies on trusted servers and clients. Peer transport keys are not authenticated independently of the signaling server, so protection against an actively malicious signaling server is not guaranteed. A valid share link grants access to claim its files; send it only to intended recipients.
 
 ## Command-line client
 
-Build the Go client in `cli/` and explicitly select your self-hosted server:
+Build from source with **Go 1.25+**:
 
 ```sh
 cd cli
@@ -57,20 +76,19 @@ go build -o xcopy ./cmd/xcopy
 ./xcopy serve
 ```
 
-The existing CLI default server is retained for compatibility; always pass `--server` for your deployment. Use `xcopy --help` for pairing, sending and receiving commands. This migration does not translate the Go CLI itself. Web download links stay hidden until `CLI_DOWNLOAD_URL` points to your published packages or an HTTPS download page. If using `/downloads/xcopy/`, serve that independent directory in your proxy.
+Replace the example URL with your server. See the [English CLI guide](https://xcopy.werfamily.fun/downloads/xcopy/en.html) or the [full CLI reference (Chinese)](cli/README.md) for setup, pairing and commands.
 
-## Checks and release
+## Development and contributing
+
+TypeScript and native HTML / CSS on the frontend, Node.js and SQLite on the server, and Go for the CLI.
 
 ```sh
 npm run check
 npm test
-npm run test:e2e
-npm run test:relay
-XCOPY_BINARY=/absolute/path/to/xcopy npm run test:cli
 ```
 
-Browser tests use Google Chrome; relay tests need coturn. Public network reachability and external TLS relay certificates require environment-specific acceptance.
+Issues, pull requests and translations are welcome. See [CONTRIBUTING.md (Chinese)](CONTRIBUTING.md) for the source layout, translation guidelines and browser / TURN tests. The CLI currently uses Chinese messages.
 
-Builds stage and validate a complete `dist/` before replacing the previous output. Never edit generated files or overwrite a running release piecemeal. A systemd release needs `package*.json`, `server/`, `src/shared/`, `scripts/frontend-artifact.js` and `dist/`; install production dependencies on the target. Keep database and secrets separate. Docker uses a multi-stage build with production-only runtime dependencies.
+## License
 
-[Language contribution guide](CONTRIBUTING.md). License: MIT.
+[MIT](LICENSE)
