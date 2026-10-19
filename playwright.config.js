@@ -8,6 +8,7 @@ export default defineConfig({
   use: { locale: 'zh-CN', baseURL: `http://localhost:${port}`, channel: 'chrome', headless: true, screenshot: 'only-on-failure', trace: 'retain-on-failure' },
   webServer: {
     command: 'node test/browser-server.js', url: `http://localhost:${port}/healthz`, reuseExistingServer: false,
-    env: { ...process.env, PORT: port, PUBLIC_ORIGIN: `http://localhost:${port}`, DB_PATH: `test-results/browser-${port}-${Date.now()}.sqlite` }
+    // Existing product scenarios assert Chinese copy; default-language behavior is tested separately.
+    env: { ...process.env, DEFAULT_LOCALE: 'zh-CN', PORT: port, PUBLIC_ORIGIN: `http://localhost:${port}`, DB_PATH: `test-results/browser-${port}-${Date.now()}.sqlite` }
   }
 });

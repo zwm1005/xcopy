@@ -4,7 +4,7 @@ import { isMessageKey } from './messages.js';
 import type { MessageArgs, MessageKey, MessageParams } from './messages.js';
 export type Locale = 'zh-CN' | 'en';
 export interface ClientConfig { defaultLocale: Locale; supportedLocales: Locale[]; cliDownloadUrl: string | null }
-let locale: Locale = 'zh-CN';
+let locale: Locale = 'en';
 const listeners = new Set<() => void>();
 export const currentLocale = () => locale;
 export function normalizeLocale(value: string | null | undefined): Locale | undefined {
@@ -16,8 +16,8 @@ export function normalizeLocale(value: string | null | undefined): Locale | unde
   }
   return undefined;
 }
-export function chooseLocale(url: string | null, saved: string | null, languages: readonly string[], fallback: string): Locale {
-  return normalizeLocale(url) || normalizeLocale(saved) || languages.map(normalizeLocale).find(Boolean) || normalizeLocale(fallback) || 'zh-CN';
+export function chooseLocale(url: string | null, saved: string | null, fallback: string): Locale {
+  return normalizeLocale(url) || normalizeLocale(saved) || normalizeLocale(fallback) || 'en';
 }
 export function translate(key: string, params: MessageParams = {}): string {
   if (!isMessageKey(key)) {
@@ -76,12 +76,12 @@ export function setLocale(next: Locale, persist = true): void {
   }
 }
 export async function initI18n(): Promise<void> {
-  let config: ClientConfig = { defaultLocale: 'zh-CN', supportedLocales: ['zh-CN', 'en'], cliDownloadUrl: null };
+  let config: ClientConfig = { defaultLocale: 'en', supportedLocales: ['zh-CN', 'en'], cliDownloadUrl: null };
   try {
     const response = await fetch('/api/client-config', { signal: AbortSignal.timeout(3000), cache: 'no-store' });
     const data: unknown = await response.json();
     if (typeof data === 'object' && data !== null && 'defaultLocale' in data && typeof data.defaultLocale === 'string') {
-      config.defaultLocale = normalizeLocale(data.defaultLocale) || 'zh-CN';
+      config.defaultLocale = normalizeLocale(data.defaultLocale) || 'en';
       if ('cliDownloadUrl' in data && typeof data.cliDownloadUrl === 'string') {
         const url = new URL(data.cliDownloadUrl, location.origin);
         if (url.protocol === 'https:' || (url.origin === location.origin && url.protocol === 'http:')) {
@@ -94,9 +94,9 @@ export async function initI18n(): Promise<void> {
   try {
     saved = localStorage.getItem('suichuan-locale');
   } catch { /* Locale persistence is optional. */ }
-  setLocale(chooseLocale(new URL(location.href).searchParams.get('lang'), saved, navigator.languages, config.defaultLocale), false);
+  setLocale(chooseLocale(new URL(location.href).searchParams.get('lang'), saved, config.defaultLocale), false);
   for (const select of document.querySelectorAll<HTMLSelectElement>('[data-locale]')) {
-    select.addEventListener('change', () => setLocale(normalizeLocale(select.value) || 'zh-CN'));
+    select.addEventListener('change', () => setLocale(normalizeLocale(select.value) || 'en'));
   }
   for (const link of document.querySelectorAll<HTMLAnchorElement>('[data-cli-download]')) {
     link.hidden = !config.cliDownloadUrl;

@@ -38,7 +38,7 @@ export function loadConfig(env = process.env) {
   if (forceRelay && !turnUrls.length) {
     throw new Error('FORCE_RELAY requires TURN_URLS and valid authentication');
   }
-  const defaultLocale = env.DEFAULT_LOCALE || 'zh-CN';
+  const defaultLocale = env.DEFAULT_LOCALE || 'en';
   if (!['zh-CN', 'en'].includes(defaultLocale)) {
     throw new Error('DEFAULT_LOCALE must be zh-CN or en');
   }

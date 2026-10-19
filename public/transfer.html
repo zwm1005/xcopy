@@ -1,13 +1,13 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<meta name="description" content="随传：在已配对的电脑间安全传递文字、截图和小文件。" data-i18n-content="page.xcopy.securely.transfers.text.screenshots.and.files.between">
+<meta name="description" content="XCopy securely transfers text, screenshots and files between paired computers." data-i18n-content="page.xcopy.securely.transfers.text.screenshots.and.files.between">
 <meta name="robots" content="noindex, follow">
 
-<title data-i18n="page.xcopy.cross.device.transfers">随传 · 跨设备快传</title>
+<title data-i18n="page.xcopy.cross.device.transfers">XCopy · Cross-device transfers</title>
 <link rel="icon" href="/icon.svg?v=20261018-brand" type="image/svg+xml">
 <link rel="stylesheet" href="/styles.css?v=20261019-file-borders">
 <link rel="stylesheet" href="/share.css?v=20261019-multiple-share">
@@ -16,101 +16,101 @@
 <link rel="stylesheet" href="/i18n.css">
 </head>
 <body>
-<div id="suichuan" data-connection="connecting" aria-label="随传 · 跨设备快传" data-i18n-aria-label="page.xcopy.cross.device.transfers">
+<div id="suichuan" data-connection="connecting" aria-label="XCopy · Cross-device transfers" data-i18n-aria-label="page.xcopy.cross.device.transfers">
   
   <div class="qt-app">
     <header class="qt-header">
-      <div class="qt-brand" aria-label="随传" data-i18n-aria-label="page.xcopy.alt"><svg class="qt-brand-mark" viewBox="0 0 128 84" aria-hidden="true"><use href="/icon.svg?v=20261018-brand#mark"/></svg><span class="qt-brand-name"><span data-i18n="page.xcopy.alt">随传</span><small>XCOPY</small></span></div>
+      <div class="qt-brand" aria-label="XCopy" data-i18n-aria-label="page.xcopy.alt"><svg class="qt-brand-mark" viewBox="0 0 128 84" aria-hidden="true"><use href="/icon.svg?v=20261018-brand#mark"/></svg><span class="qt-brand-name"><span data-i18n="page.xcopy.alt">XCopy</span><small>XCOPY</small></span></div>
       <div class="qt-header-actions">
-        <button type="button" class="qt-button qt-quiet cursor-interaction" data-action="devices"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="12" rx="2"/><path d="m4 15-3 5h22l-3-5"/></svg><span data-local-name><span data-i18n="device-name.my.computer">我的电脑</span></span></button>
-        <button type="button" class="qt-button qt-outline cursor-interaction" data-action="connect"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="app.connect.device">连接设备</span></button>
+        <button type="button" class="qt-button qt-quiet cursor-interaction" data-action="devices"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="12" rx="2"/><path d="m4 15-3 5h22l-3-5"/></svg><span data-local-name><span data-i18n="device-name.my.computer">My computer</span></span></button>
+        <button type="button" class="qt-button qt-outline cursor-interaction" data-action="connect"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span data-i18n="app.connect.device">Connect device</span></button>
       </div>
-    <label class="locale-picker"><span data-i18n="language.label">语言</span><select data-locale aria-label="Language"><option value="zh-CN">简体中文</option><option value="en">English</option></select></label></header>
+    <label class="locale-picker"><span data-i18n="language.label">Language</span><select data-locale aria-label="Language"><option value="en">English</option><option value="zh-CN">简体中文</option></select></label></header>
 
     <main class="qt-main">
       <section class="qt-intro">
-        <h1 aria-label="传点什么？" data-i18n-aria-label="page.what.would.you.like.to.send"><span class="typewriter-line" aria-hidden="true"><span class="typewriter-text"><span data-i18n="page.what.would.you.like.to.send">传点什么？</span></span><span class="typewriter-cursor">_</span></span></h1>
+        <h1 aria-label="What would you like to send?" data-i18n-aria-label="page.what.would.you.like.to.send"><span class="typewriter-line" aria-hidden="true"><span class="typewriter-text"><span data-i18n="page.what.would.you.like.to.send">What would you like to send?</span></span><span class="typewriter-cursor">_</span></span></h1>
       </section>
 
-      <div class="share-tabs" role="tablist" aria-label="传输方式" data-i18n-aria-label="page.transfer.mode">
-        <button type="button" role="tab" data-mode="device" id="device-mode" aria-selected="true" aria-controls="device-composer"><span data-i18n="page.send.to.device">发送给设备</span></button>
-        <button type="button" role="tab" data-mode="share" id="share-mode" aria-selected="false" aria-controls="share-composer"><span data-i18n="transfer.share.by.link">链接分享</span></button>
+      <div class="share-tabs" role="tablist" aria-label="Transfer mode" data-i18n-aria-label="page.transfer.mode">
+        <button type="button" role="tab" data-mode="device" id="device-mode" aria-selected="true" aria-controls="device-composer"><span data-i18n="page.send.to.device">Send to device</span></button>
+        <button type="button" role="tab" data-mode="share" id="share-mode" aria-selected="false" aria-controls="share-composer"><span data-i18n="transfer.share.by.link">Share by link</span></button>
       </div>
       <section class="share-panel" id="share-composer" role="tabpanel" aria-labelledby="share-mode" data-share-panel hidden></section>
-      <section class="qt-onboarding" data-onboarding aria-label="首次连接引导" hidden data-i18n-aria-label="page.first.connection.guide">
-        <div><h2><span data-i18n="page.connect.your.other.device.first">先连接你的另一台设备</span></h2><p><span data-i18n="page.open.the.same.url.on.both.devices.pair">两台设备打开同一网址，用连接码配对并确认。以后直接选设备发送，传输时双方保持页面打开。</span></p></div>
-        <button type="button" class="qt-button qt-outline" data-action="first-connect"><span data-i18n="page.connect.your.first.device">连接第一台设备</span></button>
+      <section class="qt-onboarding" data-onboarding aria-label="First connection guide" hidden data-i18n-aria-label="page.first.connection.guide">
+        <div><h2><span data-i18n="page.connect.your.other.device.first">Connect your other device first</span></h2><p><span data-i18n="page.open.the.same.url.on.both.devices.pair">Open the same URL on both devices, pair using a code and confirm. Then select the device to send. Keep both pages open during transfers.</span></p></div>
+        <button type="button" class="qt-button qt-outline" data-action="first-connect"><span data-i18n="page.connect.your.first.device">Connect your first device</span></button>
       </section>
 
-      <section class="qt-composer" id="device-composer" role="tabpanel" aria-labelledby="device-mode" aria-label="发送内容" data-i18n-aria-label="page.content.to.send">
-        <div class="qt-drop-hint" hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M3 16v5h18v-5"/></svg><span><span data-i18n="page.drop.to.attach">松开以添加</span></span></div>
-        <textarea data-editor aria-label="要发送的文字" placeholder="粘贴文字、截图，或拖入文件" spellcheck="false" data-i18n-aria-label="page.text.to.send" data-i18n-placeholder="page.paste.text.screenshots.or.drop.files"></textarea>
+      <section class="qt-composer" id="device-composer" role="tabpanel" aria-labelledby="device-mode" aria-label="Content to send" data-i18n-aria-label="page.content.to.send">
+        <div class="qt-drop-hint" hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M3 16v5h18v-5"/></svg><span><span data-i18n="page.drop.to.attach">Drop to attach</span></span></div>
+        <textarea data-editor aria-label="Text to send" placeholder="Paste text, screenshots or drop files" spellcheck="false" data-i18n-aria-label="page.text.to.send" data-i18n-placeholder="page.paste.text.screenshots.or.drop.files"></textarea>
         <div class="qt-attachments" data-attachments hidden></div>
         <div class="qt-compose-footer">
           <div class="qt-compose-tools">
-            <button type="button" class="qt-button qt-icon qt-quiet cursor-interaction" data-action="pick" aria-label="添加附件" data-tooltip="添加附件" data-i18n-aria-label="share-ui.add.attachments" data-i18n-data-tooltip="share-ui.add.attachments"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
-            <label class="qt-target-picker"><select aria-label="接收设备" class="cursor-interaction" data-target data-i18n-aria-label="page.receiving.device"></select></label>
+            <button type="button" class="qt-button qt-icon qt-quiet cursor-interaction" data-action="pick" aria-label="Add attachments" data-tooltip="Add attachments" data-i18n-aria-label="share-ui.add.attachments" data-i18n-data-tooltip="share-ui.add.attachments"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
+            <label class="qt-target-picker"><select aria-label="Receiving device" class="cursor-interaction" data-target data-i18n-aria-label="page.receiving.device"></select></label>
           </div>
-          <button type="button" class="qt-button qt-primary qt-send cursor-interaction" data-action="send" aria-label="发送" data-tooltip="发送" disabled data-i18n-aria-label="home.send" data-i18n-data-tooltip="home.send"><span data-send-label hidden></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
+          <button type="button" class="qt-button qt-primary qt-send cursor-interaction" data-action="send" aria-label="Send" data-tooltip="Send" disabled data-i18n-aria-label="home.send" data-i18n-data-tooltip="home.send"><span data-send-label hidden></span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
         </div>
-        <input type="file" data-files multiple hidden aria-label="选择发送的文件" data-i18n-aria-label="page.choose.files.to.send">
+        <input type="file" data-files multiple hidden aria-label="Choose files to send" data-i18n-aria-label="page.choose.files.to.send">
       </section>
       <p class="share-limit" data-device-file-limit hidden></p>
       <p class="qt-send-note" data-send-note hidden></p>
       <p class="qt-reception-note" data-reception-note hidden></p>
 
-      <section class="qt-transfers" aria-label="历史记录" data-i18n-aria-label="app.history" hidden>
-        <div class="qt-section-heading"><h2><span data-i18n="app.history">历史记录</span> <span data-count></span></h2></div>
+      <section class="qt-transfers" aria-label="History" data-i18n-aria-label="app.history" hidden>
+        <div class="qt-section-heading"><h2><span data-i18n="app.history">History</span> <span data-count></span></h2></div>
         <div data-share-records></div>
         <div data-transfers></div>
         <p class="qt-unsaved-note" data-unsaved-note hidden></p>
-        <div class="qt-history-footer"><span><span data-i18n="page.refreshing.or.closing.clears.records.and.unsaved.files">刷新或关闭页面会清空记录和未保存的文件</span></span><button type="button" class="qt-text-button" data-action="clear" hidden><span data-i18n="page.clear.finished.records">清空已结束记录</span></button></div>
+        <div class="qt-history-footer"><span><span data-i18n="page.refreshing.or.closing.clears.records.and.unsaved.files">Refreshing or closing clears records and unsaved files</span></span><button type="button" class="qt-text-button" data-action="clear" hidden><span data-i18n="page.clear.finished.records">Clear finished records</span></button></div>
       </section>
     </main>
 
     <div class="qt-toast" role="status" aria-live="polite" hidden></div>
     <div class="qt-overlay" hidden>
-      <section class="qt-dialog" role="dialog" aria-modal="true" aria-label="连接设备" data-i18n-aria-label="app.connect.device">
-        <div class="qt-dialog-top"><h2 data-dialog-title><span data-i18n="app.connect.device">连接设备</span></h2><button type="button" class="qt-button qt-icon qt-quiet cursor-interaction" data-action="close" aria-label="关闭弹层" data-i18n-aria-label="page.close.dialog"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></div>
+      <section class="qt-dialog" role="dialog" aria-modal="true" aria-label="Connect device" data-i18n-aria-label="app.connect.device">
+        <div class="qt-dialog-top"><h2 data-dialog-title><span data-i18n="app.connect.device">Connect device</span></h2><button type="button" class="qt-button qt-icon qt-quiet cursor-interaction" data-action="close" aria-label="Close dialog" data-i18n-aria-label="page.close.dialog"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></div>
         <div data-onboarding-name-panel hidden>
-          <p class="qt-dialog-description"><span data-i18n="page.this.name.appears.on.your.other.device.to">这个名称会显示在另一台设备上，方便你确认和选择。之后也可以在「我的设备」中修改。</span></p>
-          <label class="qt-field-label" for="qt-onboarding-name"><span data-i18n="page.this.device.s.name">本机名称</span></label>
-          <div class="qt-name-form qt-name-setup"><input id="qt-onboarding-name" data-onboarding-name maxlength="24" type="text" placeholder="例如：办公电脑、家里笔记本" aria-describedby="qt-name-error" data-i18n-placeholder="page.for.example.office.computer.home.laptop"><button type="button" class="qt-button qt-primary qt-full" data-action="name-and-connect"><span data-i18n="page.save.and.continue">保存并继续</span></button></div>
+          <p class="qt-dialog-description"><span data-i18n="page.this.name.appears.on.your.other.device.to">This name appears on your other device to help you identify it. You can change it later in My devices.</span></p>
+          <label class="qt-field-label" for="qt-onboarding-name"><span data-i18n="page.this.device.s.name">This device's name</span></label>
+          <div class="qt-name-form qt-name-setup"><input id="qt-onboarding-name" data-onboarding-name maxlength="24" type="text" placeholder="For example: Office computer, Home laptop" aria-describedby="qt-name-error" data-i18n-placeholder="page.for.example.office.computer.home.laptop"><button type="button" class="qt-button qt-primary qt-full" data-action="name-and-connect"><span data-i18n="page.save.and.continue">Save and continue</span></button></div>
           <p class="qt-input-error qt-name-error" id="qt-name-error" data-name-error role="alert" hidden></p>
         </div>
         <div data-pair-panel>
-          <div class="qt-segments" role="tablist" aria-label="连接方式" data-i18n-aria-label="page.connection.method">
-            <button type="button" role="tab" aria-selected="true" class="cursor-interaction" data-pair-tab="show" id="qt-show-tab" aria-controls="qt-code-panel"><span data-i18n="page.my.pairing.code">我的连接码</span></button>
-            <button type="button" role="tab" aria-selected="false" class="cursor-interaction" data-pair-tab="enter" id="qt-enter-tab" aria-controls="qt-enter-panel"><span data-i18n="page.enter.pairing.code">输入连接码</span></button>
+          <div class="qt-segments" role="tablist" aria-label="Connection method" data-i18n-aria-label="page.connection.method">
+            <button type="button" role="tab" aria-selected="true" class="cursor-interaction" data-pair-tab="show" id="qt-show-tab" aria-controls="qt-code-panel"><span data-i18n="page.my.pairing.code">My pairing code</span></button>
+            <button type="button" role="tab" aria-selected="false" class="cursor-interaction" data-pair-tab="enter" id="qt-enter-tab" aria-controls="qt-enter-panel"><span data-i18n="page.enter.pairing.code">Enter pairing code</span></button>
           </div>
           <div id="qt-code-panel" role="tabpanel" aria-labelledby="qt-show-tab">
-            <p class="qt-dialog-description"><span data-i18n="page.on.the.other.device.open.the.same.url">在另一台设备打开同一网址，点击「连接设备 → 输入连接码」，输入下方数字。然后回到本页确认连接。</span></p>
+            <p class="qt-dialog-description"><span data-i18n="page.on.the.other.device.open.the.same.url">On the other device, open the same URL, choose Connect device → Enter pairing code and enter these digits. Return here to confirm.</span></p>
             <div class="qt-code" data-code></div>
-            <div class="qt-code-meta"><span data-code-expiry><span data-i18n="page.expires.in.10.minutes">10 分钟后失效</span></span><button type="button" class="qt-text-button cursor-interaction" data-action="refresh-code"><span data-i18n="page.new.code">换一个</span></button></div>
-            <button type="button" class="qt-button qt-primary qt-full cursor-interaction" data-action="copy-code"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V3H3v13h5"/></svg><span data-i18n="app.copy">复制</span></button>
+            <div class="qt-code-meta"><span data-code-expiry><span data-i18n="page.expires.in.10.minutes">Expires in 10 minutes</span></span><button type="button" class="qt-text-button cursor-interaction" data-action="refresh-code"><span data-i18n="page.new.code">New code</span></button></div>
+            <button type="button" class="qt-button qt-primary qt-full cursor-interaction" data-action="copy-code"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V3H3v13h5"/></svg><span data-i18n="app.copy">Copy</span></button>
           </div>
           <div id="qt-enter-panel" role="tabpanel" aria-labelledby="qt-enter-tab" hidden>
-            <p class="qt-pair-help"><span data-i18n="page.enter.the.code.displayed.on.the.other.device">输入另一台设备显示的连接码，提交后请在那台设备上允许连接。</span></p>
-            <input class="qt-code-input" data-code-input inputmode="numeric" type="text" autocomplete="off" maxlength="11" placeholder="0000 0000" aria-label="8 位连接码" aria-describedby="qt-code-error" data-i18n-aria-label="page.8.digit.pairing.code">
+            <p class="qt-pair-help"><span data-i18n="page.enter.the.code.displayed.on.the.other.device">Enter the code displayed on the other device, then approve the request there.</span></p>
+            <input class="qt-code-input" data-code-input inputmode="numeric" type="text" autocomplete="off" maxlength="11" placeholder="0000 0000" aria-label="8-digit pairing code" aria-describedby="qt-code-error" data-i18n-aria-label="page.8.digit.pairing.code">
             <p class="qt-input-error" id="qt-code-error" role="alert" hidden></p>
-            <button type="button" class="qt-button qt-primary qt-full cursor-interaction" data-action="join" data-join><span data-i18n="app.connect">连接</span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>
+            <button type="button" class="qt-button qt-primary qt-full cursor-interaction" data-action="join" data-join><span data-i18n="app.connect">Connect</span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>
           </div>
         </div>
         <div data-approval-panel hidden>
-          <div class="qt-request-device"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="13" rx="2"/><path d="M12 16v5m-5 0h10"/></svg><strong data-request-name><span data-i18n="page.new.device">新设备</span></strong><span data-request-id><span data-i18n="page.requesting.connection">请求连接</span></span></div>
-          <p class="qt-dialog-description qt-center"><span data-i18n="page.allow.this.device.to.connect">允许这台设备连接？</span></p>
-          <div class="qt-request-actions"><button type="button" class="qt-button qt-outline cursor-interaction" data-action="deny"><span data-i18n="page.decline">拒绝</span></button><button type="button" class="qt-button qt-primary cursor-interaction" data-action="allow"><span data-i18n="page.allow.and.remember">允许并记住</span></button></div>
+          <div class="qt-request-device"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="13" rx="2"/><path d="M12 16v5m-5 0h10"/></svg><strong data-request-name><span data-i18n="page.new.device">New device</span></strong><span data-request-id><span data-i18n="page.requesting.connection">Requesting connection</span></span></div>
+          <p class="qt-dialog-description qt-center"><span data-i18n="page.allow.this.device.to.connect">Allow this device to connect?</span></p>
+          <div class="qt-request-actions"><button type="button" class="qt-button qt-outline cursor-interaction" data-action="deny"><span data-i18n="page.decline">Decline</span></button><button type="button" class="qt-button qt-primary cursor-interaction" data-action="allow"><span data-i18n="page.allow.and.remember">Allow and remember</span></button></div>
         </div>
         <div data-devices-panel hidden>
-          <label class="qt-field-label" for="qt-local-name"><span data-i18n="page.this.device.s.name">本机名称</span></label>
-          <div class="qt-name-form"><input id="qt-local-name" data-name-input maxlength="24" type="text"><button type="button" class="qt-button qt-outline cursor-interaction" data-action="rename"><span data-i18n="app.save">保存</span></button></div>
-          <h3 class="qt-devices-heading"><span data-i18n="page.paired.devices">已配对设备</span></h3>
+          <label class="qt-field-label" for="qt-local-name"><span data-i18n="page.this.device.s.name">This device's name</span></label>
+          <div class="qt-name-form"><input id="qt-local-name" data-name-input maxlength="24" type="text"><button type="button" class="qt-button qt-outline cursor-interaction" data-action="rename"><span data-i18n="app.save">Save</span></button></div>
+          <h3 class="qt-devices-heading"><span data-i18n="page.paired.devices">Paired devices</span></h3>
           <div data-devices-list></div>
         </div>
       </section>
     </div>
-    <dialog class="qt-image-preview" data-image-preview aria-label="图片预览" aria-describedby="qt-preview-name" data-i18n-aria-label="page.image.preview">
-      <button type="button" class="qt-preview-close" data-action="close-image" aria-label="关闭图片预览" autofocus data-i18n-aria-label="page.close.image.preview"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
+    <dialog class="qt-image-preview" data-image-preview aria-label="Image preview" aria-describedby="qt-preview-name" data-i18n-aria-label="page.image.preview">
+      <button type="button" class="qt-preview-close" data-action="close-image" aria-label="Close image preview" autofocus data-i18n-aria-label="page.close.image.preview"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
       <img class="qt-preview-image" data-preview-image alt="">
       <p class="qt-preview-name" id="qt-preview-name" data-preview-name></p>
     </dialog>

@@ -1,6 +1,6 @@
 # 贡献指南
 
-欢迎提交问题、修复和语言包。项目使用 Node.js 24+；CLI 开发需要 Go 1.25+。本地启动步骤见 [README](README.md#快速开始)。
+欢迎提交问题、修复和语言包。项目使用 Node.js 24+；CLI 开发需要 Go 1.25+。本地启动步骤见[中文 README](README.zh-CN.md#快速开始)。
 
 ## 代码结构
 
@@ -28,7 +28,7 @@
 3. 在 `onLocaleChange` 中按原状态更新动态文案；不要重建连接、传输任务或设备身份。RTL 语言需额外适配布局。
 4. 检查窄屏、键盘操作、属性文案、输入焦点和切换时仍在进行的传输。
 
-语言优先级为 `?lang=`、已保存偏好、浏览器语言、`DEFAULT_LOCALE`、中文。切换不刷新页面，存储不可用时也应保持可用。服务端错误使用可选的 `messageKey/messageParams`、`reasonKey/reasonParams`，保留旧中文字段以兼容已有客户端；新增消息时同步维护 `server/message-keys.js` 和词典。
+语言优先级为 `?lang=`、已保存的手动选择、`DEFAULT_LOCALE`、英文；默认配置为 `en`，不再根据浏览器语言自动切换。切换不刷新页面，存储或配置接口不可用时也应保持可用。服务端错误使用可选的 `messageKey/messageParams`、`reasonKey/reasonParams`，保留旧中文字段以兼容已有客户端；新增消息时同步维护 `server/message-keys.js` 和词典。
 
 ## 验证
 
@@ -61,7 +61,7 @@ node scripts/smoke-multiple.js https://send.example.com
 
 ## 部署与发布
 
-基础 Docker 部署步骤见 [README](README.md#自部署)。应用使用单实例维护 WebSocket 会话与任务，SQLite 持久化设备身份和配对。公开入口必须使用 HTTPS；改变域名、协议或端口会改变浏览器身份存储范围。`TRUST_PROXY=1` 只用于受控代理后，app 端口不应直接暴露公网。
+基础 Docker 部署步骤见[中文 README](README.zh-CN.md#自部署)。应用使用单实例维护 WebSocket 会话与任务，SQLite 持久化设备身份和配对。公开入口必须使用 HTTPS；改变域名、协议或端口会改变浏览器身份存储范围。`TRUST_PROXY=1` 只用于受控代理后，app 端口不应直接暴露公网。
 
 ### 网络配置
 

@@ -28,10 +28,15 @@ test('ICE URI syntax, auth modes and configuration combinations fail closed with
 });
 
 test('locale selection, interpolation and historical errors retain compatibility', () => {
-  assert.equal(chooseLocale('en', 'zh-CN', ['zh-CN'], 'zh-CN'), 'en');
-  assert.equal(chooseLocale(null, 'en', ['zh-CN'], 'zh-CN'), 'en');
-  assert.equal(chooseLocale(null, null, ['fr', 'en-US'], 'zh-CN'), 'en');
-  assert.equal(chooseLocale(null, null, ['fr'], 'en'), 'en');
+  assert.equal(loadConfig({}).defaultLocale, 'en');
+  assert.equal(loadConfig({ DEFAULT_LOCALE: 'zh-CN' }).defaultLocale, 'zh-CN');
+  assert.equal(chooseLocale('en', 'zh-CN', 'zh-CN'), 'en');
+  assert.equal(chooseLocale('zh-CN', 'en', 'en'), 'zh-CN');
+  assert.equal(chooseLocale(null, 'en', 'zh-CN'), 'en');
+  assert.equal(chooseLocale(null, 'zh-CN', 'en'), 'zh-CN');
+  assert.equal(chooseLocale(null, null, 'zh-CN'), 'zh-CN');
+  assert.equal(chooseLocale(null, null, 'en'), 'en');
+  assert.equal(chooseLocale('invalid', 'invalid', 'invalid'), 'en');
   setLocale('en');
   assert.equal(t('app.remove', { p0: '<文件.txt>' }), 'Remove <文件.txt>');
   const reason = '无法建立 P2P 直连，服务器中转单个文件不能超过 75 MB；请更换网络后重试';

@@ -1,19 +1,19 @@
-# 随传 · XCopy
+# XCopy · 随传
 
-在设备之间发送文字、截图和文件。打开网页即可使用，无需账号，也可以部署到自己的服务器。
+Send text, screenshots and files between devices. Open it in your browser, no account needed, or host it on your own server.
 
-[在线使用](https://xcopy.werfamily.fun/transfer) · [English](README.en.md) · [贡献指南](CONTRIBUTING.md)
+[Try it online](https://xcopy.werfamily.fun/transfer?lang=en) · [简体中文](README.zh-CN.md) · [Contributing](CONTRIBUTING.md)
 
-## 功能
+## Features
 
-- **设备互传**：连接码配对，支持拖放文件、粘贴截图和向多台设备发送。
-- **链接分享**：生成链接或二维码，支持一次领取、多人领取和接收端打包下载。
-- **直连与中继**：WebRTC 优先直连，可配置自己的 STUN / TURN 服务。
-- **多端使用**：网页支持简体中文和英文，Go CLI 支持无桌面环境的设备。
+- **Device transfers** — Pair with a connection code, drag files, paste screenshots and send to multiple devices.
+- **Share links** — Share by link or QR code, with single or multiple recipients and ZIP downloads on the receiving end.
+- **Direct connections and relays** — WebRTC prefers direct connections and supports your own STUN / TURN services.
+- **Browser and CLI** — English by default, with a Chinese interface and a Go CLI for devices without a desktop.
 
-## 快速开始
+## Quick start
 
-需要 **Node.js 24+**。
+Requires **Node.js 24+**.
 
 ```sh
 git clone https://github.com/zwm1005/xcopy.git
@@ -23,51 +23,51 @@ npm run build
 npm start
 ```
 
-打开 [localhost:8787](http://localhost:8787)。在两端进入传输页，通过 8 位连接码配对并确认，即可发送内容；也可直接创建分享链接。
+Open [localhost:8787](http://localhost:8787). Open the transfer page on both devices, pair with an 8-digit code and approve the request. You can also share files by link without pairing the recipient.
 
-本机测试两台设备时，使用不同浏览器或浏览器配置。开发时运行 `npm run dev`，构建完成后手动刷新页面。
+Use separate browsers or browser profiles to test two devices locally. Run `npm run dev` for development and refresh after each successful build.
 
-## 自部署
+## Self hosting
 
-准备好域名及 Docker Compose，将域名解析到服务器并开放 TCP 80 / 443。
+Install Docker Compose, point your domain to the server and allow TCP ports 80 / 443.
 
 ```sh
 cp .env.example .env
 ```
 
-编辑 `.env`，将 `PUBLIC_ORIGIN` 设为自己的 HTTPS 地址，例如 `https://send.example.com`。按需配置网络服务：
+Set `PUBLIC_ORIGIN` in `.env` to your HTTPS origin, such as `https://send.example.com`. Configure connectivity as needed:
 
-| 配置 | 用途 |
+| Setting | Purpose |
 | --- | --- |
-| `STUN_URLS` | STUN 地址，多个地址以逗号分隔 |
-| `TURN_URLS` | TURN 中继地址，多个地址以逗号分隔 |
-| `TURN_AUTH_MODE=shared-secret`、`TURN_SECRET` | 共享密钥认证；密钥至少 32 字符，须与 TURN 服务端一致，用户名和密码留空 |
-| `TURN_AUTH_MODE=static`、`TURN_USERNAME`、`TURN_PASSWORD` | 或使用静态账号认证；此时将 `TURN_SECRET` 留空 |
+| `STUN_URLS` | Comma-separated STUN URLs, e.g. `stun:stun.example.com:3478` |
+| `TURN_URLS` | Comma-separated TURN URLs, e.g. `turn:relay.example.com:3478?transport=udp` |
+| `TURN_AUTH_MODE=shared-secret`, `TURN_SECRET` | A secret of at least 32 characters matching the TURN server; leave username and password empty |
+| `TURN_AUTH_MODE=static`, `TURN_USERNAME`, `TURN_PASSWORD` | Alternatively, use a static account and leave `TURN_SECRET` empty |
 
-没有内置的公共 STUN / TURN 备用服务；不配置 TURN 时，部分网络之间可能无法连接。静态凭证会提供给获准传输的客户端，建议使用专用受限账号。地址格式及更多配置见 [.env.example](.env.example) 和[部署说明](CONTRIBUTING.md#部署与发布)。
+No public STUN / TURN fallback is built in. Without TURN, some networks cannot connect. Static credentials are delivered to authorized clients; use a dedicated, restricted account.
 
 ```sh
 docker compose config --quiet
 docker compose up -d --build
 ```
 
-默认启动应用和 Caddy，由 Caddy 管理 HTTPS。需要同时部署 coturn，或使用 systemd / Nginx，见[部署与发布](CONTRIBUTING.md#部署与发布)。
+This starts the app and Caddy, which manages HTTPS. See the [deployment guide (Chinese)](CONTRIBUTING.md#部署与发布) for bundled coturn, systemd / Nginx and configuration updates.
 
-## 使用须知
+## Before you transfer
 
-- 双方需要在线，分享期间发送页须保持打开。网页刷新或关闭会清空传输记录和未保存的接收内容；不支持离线投递或跨刷新续传。
-- 网页直连不设业务文件大小上限，实际受浏览器和设备资源限制；TURN 中转默认单文件 **50 MiB**，可通过 `MAX_FILE_MB` 调整。超出中转上限的文件仅尝试直连；CLI 限制见[客户端说明](cli/README.md)。
-- 配对会保留在当前浏览器配置中。清除站点数据或结束无痕会话后，需要重新配对。
+- Both devices must be online. Keep the sending page open while sharing. Refreshing or closing a page clears its history and unsaved received content. Offline delivery and resuming across reloads are not supported.
+- Browser direct transfers have no application-level file size limit, but remain constrained by device and browser resources. TURN defaults to **50 MiB per file**, configurable with `MAX_FILE_MB`. Larger files only attempt direct connections. The [CLI has its own limits](cli/README.md).
+- Pairings persist for the current browser profile. Clearing site data or ending a private session requires pairing again.
 
-## 安全与隐私
+## Security and privacy
 
-文件内容通过 WebRTC DataChannel 的 **DTLS 加密**传输，走 TURN 中继时也保持加密。应用服务端不保存文件内容，但会处理设备信息、文件名和大小等元数据。接收端使用 SHA-256 校验内容完整性。
+File content uses WebRTC DataChannels with **DTLS encryption**, including through TURN. The application server does not store file content, but processes device information, filenames and sizes. Receivers verify content integrity with SHA-256.
 
-当前安全模型依赖服务器和客户端可信，尚未实现独立于信令服务器的对端传输密钥认证，无法保证抵御恶意信令服务器的主动中间人攻击。有效分享链接等同领取凭证，请只分享给预期接收者。
+The current model relies on trusted servers and clients. Peer transport keys are not authenticated independently of the signaling server, so protection against an actively malicious signaling server is not guaranteed. A valid share link grants access to claim its files; send it only to intended recipients.
 
-## 命令行客户端
+## Command-line client
 
-需要 **Go 1.25+** 从源码构建：
+Build from source with **Go 1.25+**:
 
 ```sh
 cd cli
@@ -76,19 +76,19 @@ go build -o xcopy ./cmd/xcopy
 ./xcopy serve
 ```
 
-将示例地址替换为实际服务地址。安装、配对、收发命令和后台服务见 [CLI 使用说明](cli/README.md)。
+Replace the example URL with your server. See the [English CLI guide](https://xcopy.werfamily.fun/downloads/xcopy/en.html) or the [full CLI reference (Chinese)](cli/README.md) for setup, pairing and commands.
 
-## 开发与贡献
+## Development and contributing
 
-前端使用 TypeScript + 原生 HTML / CSS，服务端使用 Node.js + SQLite，CLI 使用 Go。
+TypeScript and native HTML / CSS on the frontend, Node.js and SQLite on the server, and Go for the CLI.
 
 ```sh
 npm run check
 npm test
 ```
 
-欢迎提交 Issue、Pull Request 或语言包。代码结构、翻译规范及浏览器 / TURN 测试见[贡献指南](CONTRIBUTING.md)。
+Issues, pull requests and translations are welcome. See [CONTRIBUTING.md (Chinese)](CONTRIBUTING.md) for the source layout, translation guidelines and browser / TURN tests. The CLI currently uses Chinese messages.
 
-## 许可证
+## License
 
 [MIT](LICENSE)

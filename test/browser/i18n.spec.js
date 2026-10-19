@@ -21,14 +21,19 @@ async function pair(a, b) {
   await expect(b.locator('.qt-overlay')).toBeHidden();
 }
 
-test('English homepage and locale priority, blocked storage and missing config remain usable', async ({ browser, baseURL }) => {
-  const context = await browser.newContext({ locale: 'en-US' });
+test('English default overrides browser language while explicit choices, blocked storage and missing config remain usable', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ locale: 'zh-CN' });
   const page = await context.newPage();
+  await page.route('**/api/client-config', route => route.fulfill({ json: { defaultLocale: 'en', supportedLocales: ['zh-CN', 'en'], cliDownloadUrl: null } }));
   try {
     await page.goto(baseURL);
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
     await expect(page.getByRole('link', { name: 'Start transferring' })).toBeVisible();
     await expect(page.locator('[data-cli-download]:visible')).toHaveCount(0);
+    await page.getByRole('link', { name: 'Start transferring', exact: true }).click();
+    await expect(page.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    await page.goto(baseURL);
     await page.locator('[data-locale]').selectOption('zh-CN');
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
@@ -39,17 +44,40 @@ test('English homepage and locale priority, blocked storage and missing config r
   } finally {
     await context.close();
   }
-  const blocked = await browser.newContext({ locale: 'en-US' });
+  const blocked = await browser.newContext({ locale: 'zh-CN' });
   await blocked.addInitScript(() => Object.defineProperty(window, 'localStorage', { get() { throw new Error('blocked'); } }));
   const fallback = await blocked.newPage();
   await fallback.route('**/api/client-config', route => route.abort());
   try {
+    await fallback.goto(baseURL);
+    await expect(fallback.locator('html')).toHaveAttribute('lang', 'en');
+    await expect(fallback.getByRole('link', { name: 'Start transferring', exact: true })).toBeVisible();
+    await expect(fallback.locator('[data-demo-send]')).toBeVisible();
     await ready(fallback, baseURL);
     await expect(fallback.locator('html')).toHaveAttribute('lang', 'en');
     await fallback.locator('[data-locale]').selectOption('zh-CN');
     await expect(fallback.locator('[data-editor]')).toHaveAttribute('placeholder', '粘贴文字、截图，或拖入文件');
   } finally {
     await blocked.close();
+  }
+});
+
+test('initial HTML is English even before JavaScript initializes', async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ locale: 'zh-CN', javaScriptEnabled: false });
+  const page = await context.newPage();
+  try {
+    await page.goto(baseURL);
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Copy here');
+    await expect(page.locator('meta[property="og:locale"]')).toHaveAttribute('content', 'en_US');
+    await expect(page.locator('[data-locale]')).toHaveValue('en');
+    for (const path of ['/transfer', '/s']) {
+      await page.goto(`${baseURL}${path}`);
+      await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+      await expect(page.locator('[data-locale]')).toHaveValue('en');
+    }
+  } finally {
+    await context.close();
   }
 });
 
