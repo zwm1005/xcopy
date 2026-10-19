@@ -202,7 +202,7 @@ test('share cancellation, expiry and metadata limits are enforced on the server'
   const sender = await connect('分享者');
   const outsider = await connect('其他设备');
   const a = await guest(connect);
-  for (const files of [[], Array(9).fill(metadata), [{ ...metadata, size: -1 }], [{ ...metadata, size: 51 * 1048576 }], Array(5).fill({ ...metadata, size: 50 * 1048576 })]) {
+  for (const files of [[], Array(9).fill(metadata), [{ ...metadata, size: -1 }], [{ ...metadata, size: Number.MAX_SAFE_INTEGER + 1 }], [{ ...metadata, size: 1.5 }]]) {
     await rejected(sender.rpc('share.create', { files, minutes: 10 }), 'SIZE_LIMIT');
   }
   await rejected(sender.rpc('share.create', { files: [metadata], minutes: 0 }), 'INVALID');
@@ -467,7 +467,7 @@ test('a new server instance reads persisted relationships and names; limits and 
   const b2 = await second.connect('ignored', b.keys);
   assert.equal(a2.authResult.device.name, '办公电脑');
   assert.equal((await a2.rpc('peers.list')).peers[0].id, b2.id);
-  await rejected(a2.rpc('transfer.start', { peerId: b2.id, metadata: { ...metadata, size: 51 * 1048576 } }), 'SIZE_LIMIT');
+  await rejected(a2.rpc('transfer.start', { peerId: b2.id, metadata: { ...metadata, size: -1 } }), 'SIZE_LIMIT');
   const response = await fetch(`http://127.0.0.1:${second.address.port}/data/suichuan.sqlite`);
   assert.equal(response.status, 404);
 });

@@ -85,7 +85,7 @@ test('tabs keep the common heading in place and successful sharing consumes only
   });
   await page.locator('[data-share-generate]').click();
   await expect(page.locator('.qt-toast')).toHaveText('测试：创建暂时失败，请重试');
-  await expect(page.locator('.share-upload .share-file-name')).toHaveText(files[0].name);
+  await expect(page.locator('.share-upload .qt-attachment-name')).toHaveText(files[0].name);
   await expect(page.locator('[data-share-generate]')).toBeEnabled();
   await page.locator('[data-share-generate]').click();
   await expect(page.locator('[data-share-generate]')).toHaveText('正在创建…');
@@ -107,7 +107,7 @@ test('tabs keep the common heading in place and successful sharing consumes only
     await recipient.page.locator('[data-save-index="0"]').click();
     expect(await readFile(await (await download).path())).toEqual(files[0].buffer);
     await page.getByRole('button', { name: '创建新的分享' }).click();
-    await expect(page.locator('.share-upload .share-file')).toHaveCount(0);
+    await expect(page.locator('.share-upload .qt-attachment')).toHaveCount(0);
     await expect(page.locator('[data-share-generate]')).toBeDisabled();
   } finally {
     await recipient.context.close();
@@ -230,7 +230,7 @@ test('share cancellation prevents claim and sender refresh invalidates the share
   await s.page.locator('[data-share-panel]').getByRole('button', { name: '取消分享', exact: true }).click();
   await expect(a.page.getByRole('heading', { level: 1 })).toHaveText('分享已被取消');
   await expect(s.page.getByRole('button', { name: '创建新的分享' })).toHaveCount(0);
-  await expect(s.page.locator('.share-upload .share-file')).toHaveCount(0);
+  await expect(s.page.locator('.share-upload .qt-attachment')).toHaveCount(0);
   await expect(s.page.locator('[data-share-generate]')).toBeDisabled();
   await expect(s.page.locator('[data-share-record][data-status="cancelled"]')).toBeVisible();
   await s.page.locator('[data-files]').setInputFiles(files.slice(0, 1));
@@ -366,7 +366,7 @@ test('completed sharing becomes a compact result; history details stay inline wh
     await s.page.emulateMedia({ colorScheme: 'light' });
     await s.page.screenshot({ path: testInfo.outputPath('分享详情-1280-light.png'), fullPage: true });
     await panel.getByRole('button', { name: '创建新的分享' }).click();
-    await expect(panel.getByRole('button', { name: '选择文件', exact: true })).toBeFocused();
+    await expect(panel.getByRole('button', { name: '添加附件', exact: true })).toBeFocused();
     await expect(s.page.locator('[data-share-generate]')).toBeDisabled();
     await s.page.locator('[data-files]').setInputFiles([file]);
     await s.page.locator('[data-share-generate]').click();
@@ -385,7 +385,7 @@ test('completed sharing becomes a compact result; history details stay inline wh
     await expect(panel.getByRole('button', { name: '复制链接', exact: true })).toBeFocused();
     s.page.once('dialog', (dialog) => dialog.accept());
     await panel.getByRole('button', { name: '取消分享', exact: true }).click();
-    await expect(panel.getByRole('button', { name: '选择文件', exact: true })).toBeFocused();
+    await expect(panel.getByRole('button', { name: '添加附件', exact: true })).toBeFocused();
     await expect(panel.locator('[data-share-generate]')).toBeDisabled();
     await expect(s.page.locator('[data-share-record][data-status="cancelled"] .share-record-details')).toBeHidden();
     const downloadEvent = recipient.page.waitForEvent('download');

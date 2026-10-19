@@ -466,7 +466,7 @@ export class ShareComposer {
       } else if (selected.status === 'claimed') {
         const items = this.transfers.items.filter((i) => i.shareId === selected.id);
         this.panel.append(progressNode(items, selected.totalBytes, selected.files.filter((f) => f.completed).length, selected.files.length));
-        this.panel.append(el('p', 'share-description', items.some((i) => i.status === 'failed') ? '连接中断，等待原接收页面重试。其他人无法领取。' : '对方正在领取，请保持页面打开。全部文件校验完成后，链接自动失效。'));
+        this.panel.append(el('p', 'share-description', items.find((i) => i.status === 'failed')?.reason || (items.some((i) => i.status === 'failed') ? '连接中断，等待原接收页面重试。其他人无法领取。' : '对方正在领取，请保持页面打开。全部文件校验完成后，链接自动失效。')));
       }
       const footer = el('div', 'share-footer');
       const cancel = action(selected.mode === 'multiple' ? '结束并中断' : '取消分享', async () => {

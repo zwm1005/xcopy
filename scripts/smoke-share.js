@@ -118,7 +118,7 @@ try {
   sender.once('dialog', (d) => d.accept());
   await sender.locator('[data-share-panel]').getByRole('button', { name: '取消分享', exact: true }).click();
   await expect(sender.locator('[data-share-generate]')).toBeDisabled();
-  await expect(sender.locator('.share-upload .share-file')).toHaveCount(0);
+  await expect(sender.locator('.share-upload .qt-attachment')).toHaveCount(0);
   await expect(sender.getByRole('button', { name: '创建新的分享' })).toHaveCount(0);
   await expect(sender.locator('[data-share-record][data-status="cancelled"]')).toBeVisible();
   checks.push('取消后直接显示空白分享表单，取消记录保留在历史记录');

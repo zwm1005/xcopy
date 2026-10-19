@@ -184,6 +184,15 @@ function render() {
     panel.append(el('p', 'share-message', '当前页面仍可再次保存；刷新或关闭后将无法找回。'));
   } else if (share.mine && !closed) {
     panel.append(progressNode([...items.values()], share.totalBytes, share.files.filter((f) => f.completed).length, share.files.length));
+    const reasons = [...new Set([...items.values()].filter((item) => item.status === 'failed' && item.reason).map((item) => item.reason))];
+    if (!reasons.length && mine?.reason) {
+      reasons.push(mine.reason);
+    }
+    for (const reason of reasons) {
+      const feedback = el('p', 'share-feedback', reason);
+      feedback.setAttribute('role', 'alert');
+      panel.append(feedback);
+    }
     const retry = action(busy ? '正在重新连接…' : '重试未完成的文件', () => rpc('share.retry'));
     retry.hidden = mine?.state === 'queued';
     retry.disabled = busy || !connection.ready || !share.senderOnline;
