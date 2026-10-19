@@ -2,21 +2,15 @@
 
 在直接配对的浏览器之间传文字、截图和小文件。网页免安装，无账号，支持 WebRTC 直连和自建 TURN 中继。界面沿用确认的黑白灰传输页原型。
 
-## 项目位置
-
-源码作为独立 Git 项目维护，当前本机目录为 `/Users/work/code/mine/suichuan`。
-
-- 服务器部署说明：[随传部署说明](../wf-config/docs/随传部署说明.md)。`wf-config` 仅维护随传的部署文档。
-- 需求、设计和历次交付记录：[跨设备快传文档](../docs/2026-10-17-跨设备快传MVP/)。
-- 应用代码、测试、依赖清单及部署配置模板统一保存在本项目内。
+[English](README.en.md) · [贡献与语言包](CONTRIBUTING.md)
 
 ## 本机运行
 
 需要 Node.js 24 或以上。
 
 ```sh
-cd /Users/work/code/mine/suichuan
 npm ci
+npm run build
 npm start
 ```
 
@@ -77,76 +71,91 @@ PORT=18877 PUBLIC_ORIGIN=http://localhost:18877 npm start
 
 服务端可配置 `SHARE_CONCURRENCY`（1–3，默认 3）、`SHARE_QUEUE_LIMIT`（默认 20）、`SHARE_GLOBAL_CLAIMS`（默认 256 个在途领取）和 `SHARE_WATCHER_LIMIT`（默认每份分享 200 个在线预览订阅）。这些限制保护当前连接和任务资源，不限制一份分享的累计完成次数。
 
-部署验收：`node scripts/smoke-share.js https://xcopy.werfamily.fun` 验证一次领取；`node scripts/smoke-multiple.js https://xcopy.werfamily.fun` 验证多人、排队及重试，加 `--relay` 强制 TURN。使用 `--expiry` 对线上真实等待 10 分钟，验证单次及多人过期。用 `XCOPY_ARTIFACTS` 指定报告与截图目录。
+部署验收：`node scripts/smoke-share.js https://send.example.com` 验证一次领取；`node scripts/smoke-multiple.js https://send.example.com` 验证多人、排队及重试，加 `--relay` 强制 TURN。使用 `--expiry` 对线上真实等待 10 分钟，验证单次及多人过期。用 `XCOPY_ARTIFACTS` 指定报告与截图目录。
+
+## 语言与开发
+
+前端使用 TypeScript strict + 原生 HTML/CSS，`tsc` 输出 ES Modules；服务端保持 JavaScript，CLI 保持 Go。页面提供简体中文和英文。语言选择顺序为 `?lang=`、已保存偏好、浏览器语言、`DEFAULT_LOCALE`、中文。切换语言不刷新页面，不重建设备身份或连接，用户输入和文件名保持原文；存储不可用时仍可使用。
+
+`npm run dev` 先构建，再监听 `src/` 和 `public/`；构建成功后手动刷新页面。`npm start` 只启动已有完整产物，首次运行须先构建。`public/` 是静态源文件，运行页面来自 `dist/public/`。不要直接编辑 dist；业务模块 URL 仍为 `/app.js`、`/transfer.js`、`/connection.js` 等。
 
 ## 自部署
 
-Compose 面向具有公网 IPv4 的 Linux 主机，包含单实例应用、Caddy HTTPS 和 coturn。配对及设备登记持久化到 SQLite 卷；会话、连接码和传输任务不落盘。当前控制状态由单实例维护，不能直接横向扩容多个 app 副本。
+应用单实例维护 WebSocket 会话和任务，SQLite 保存设备与配对。基础 `compose.yaml` 只运行 app/Caddy，支持已有外部 STUN/TURN，也支持仅 STUN 或空 ICE；后两者只能连接可直达的网络，不能保证所有跨网连接。所有公开入口使用 HTTPS，域名、协议和端口改变会改变浏览器身份存储范围。
 
-1. 把域名的 DNS A 记录指向服务器；为该域名使用可到达源站的 DNS 配置。云防火墙和系统防火墙放通 TCP 80/443、TCP/UDP 3478、UDP 49160–49359。
-2. 复制 `.env.example` 为 `.env`，填写 `PUBLIC_ORIGIN`、`TURN_EXTERNAL_IP`、`TURN_REALM`、`TURN_URLS`、`STUN_URLS`，生成并填写 `TURN_SECRET`。该秘密只用于 app 和 coturn 之间，不发给浏览器；浏览器收到限时 HMAC 中继凭证。
-3. 启动：
+复制 `.env.example` 为 `.env`，设置自己的 `PUBLIC_ORIGIN=https://send.example.com`，选择一种方式：
+
+1. 仅 STUN：`STUN_URLS=stun:stun.example.com:3478`，`TURN_URLS` 留空。
+2. 外部 TURN 共享密钥：设置 `TURN_URLS=turn:relay.example.com:3478?transport=udp,turn:relay.example.com:3478?transport=tcp`、`TURN_AUTH_MODE=shared-secret`、至少 32 字符的 `TURN_SECRET`；`TURN_USERNAME/TURN_PASSWORD` 留空。
+3. 外部 TURN 静态账号：设置同样的地址以及 `TURN_AUTH_MODE=static`、`TURN_USERNAME`、`TURN_PASSWORD`，`TURN_SECRET` 留空。静态凭证会提供给获准传输的客户端，建议使用专用受限账号。TLS 中继可用 `turns:relay.example.com:5349?transport=tcp`，证书由 TURN 管理员配置。
+
+地址列表以逗号分隔，去空白、去重，支持域名、IPv4 和方括号 IPv6。拒绝 URI 内嵌账号、非法端口和未知参数。首期 STUN 只支持 `stun:`。空值不会自动使用作者或第三方服务器。`FORCE_RELAY=1` 必须同时配置有效 TURN。共享密钥凭证有效期由 `TURN_CREDENTIAL_TTL_SECONDS` 控制，默认 3600，范围 3600–86400 秒。
 
 ```sh
+docker compose config --quiet
 docker compose up -d --build
-docker compose ps
 ```
 
-Caddy 自动申请 HTTPS 证书并转发 WebSocket。应用端口只在 Compose 内网开放；`TRUST_PROXY=1` 只在这个受控反向代理后启用。不要将信任转发头的 app 端口直接暴露公网。coturn 使用 host 网络，默认拒绝向私网、回环及链路本地地址中继。
-
-每台设备最多同时参与 16 项传输。`deploy/turn-limits.conf` 将 TURN 单用户/总 allocation 配额设为 64/128，并预留 200 个中继端口，覆盖批量发送的 UDP/TCP 候选开销；这是小规模部署默认值，扩大容量时需同时调整配额、端口范围与防火墙。
-
-如已有 Nginx/Caddy，可只运行 app 和 turn，将自己的代理转发到 app，并保持 `PUBLIC_ORIGIN` 与浏览器访问地址完全相同。更改协议、域名或端口会改变浏览器存储范围，可能需要重新配对。部署在 NAT 后时还需按 coturn 的 `external-ip=公网/内网` 规则调整中继配置。
-
-普通访问日志不会记录控制消息或文件内容；不要在前置代理启用 WebSocket 内容抓取。公网 TURN 需要可用 UDP/TCP 端口；若所在网络封锁这些端口，需要另行配置 TURN over TLS 及其证书/端口。
-
-## 验证
+需要本项目启动 coturn 时，额外填写 `TURN_EXTERNAL_IP`、`TURN_REALM`、共享 `TURN_SECRET`，使用覆盖文件：
 
 ```sh
+docker compose -f compose.yaml -f compose.turn.yaml config --quiet
+docker compose -f compose.yaml -f compose.turn.yaml up -d --build
+```
+
+自带 coturn 仅使用共享密钥模式；`TURN_URLS` 须指向该实例。覆盖文件使用 Linux host 网络。开放 TCP 80/443、TCP/UDP 3478 和 UDP 49160–49359；其他端口以实际 TURN 配置为准。Caddy 自动申请 HTTPS 证书。`TRUST_PROXY=1` 仅用于受控代理后，app 端口不应直接暴露公网。
+
+配置优先级：进程环境变量高于 npm 启动命令加载的 `.env`；裸 `node server/index.js` 不加载 `.env`。systemd 使用 `EnvironmentFile`，Compose 显式映射配置。修改 ICE、语言、CLI 下载或 IndexNow 无需重新构建前端，但必须按运行方式更新进程：
+
+- 本地：停止旧进程，再 `npm start`；检查同名进程环境变量是否覆盖 `.env`。
+- systemd：更新环境文件后重启应用；只有 unit 本身变化才需要 daemon-reload。
+- Compose：更新 `.env` 后先 `docker compose config --quiet`，再 `docker compose up -d --no-deps --force-recreate app`。仅 `restart` 不会更新容器环境变量。
+
+使用了 `--env-file`、`-p`、`-f` 的部署，后续所有命令保持相同参数。自带 coturn 轮换共享密钥时，维护窗口内停止 app，更新两端密钥，重建 turn，再重建 app：
+
+```sh
+docker compose -f compose.yaml -f compose.turn.yaml config --quiet
+docker compose -f compose.yaml -f compose.turn.yaml stop app
+docker compose -f compose.yaml -f compose.turn.yaml up -d --no-deps --force-recreate turn
+docker compose -f compose.yaml -f compose.turn.yaml up -d --no-deps --force-recreate app
+```
+
+回滚密钥须同时恢复 app 和 coturn，再按上述顺序重建，不能只回滚一端。配置命令使用 `--quiet` 避免将凭证展开到日志。运行时 `/api/client-config` 仅返回默认语言、支持语言和可选 CLI 下载地址，不含 ICE 凭证。STUN/TURN 参数仍由已授权的传输控制协议下发，浏览器与 CLI 共用入口。
+
+## 发现端点与下载
+
+Node 精确提供 `/robots.txt`、`/sitemap.xml`、`/indexnow.txt`，支持 GET/HEAD，使用 no-store。站点地图从 `PUBLIC_ORIGIN` 生成。`INDEXNOW_KEY` 默认空，端点返回 404；配置值必须是 8–128 位 ASCII 字母、数字或连字符。固定路径需要外部提交工具显式携带 `keyLocation=<PUBLIC_ORIGIN>/indexnow.txt`；本项目不会自动提交。
+
+`deploy/aliyun/` 现为通用 systemd/Nginx 模板，须替换示例域名、证书、监听和公网 IP。Nginx 将发现路径代理到 Node，不能沿用旧版本从 `current/public` 直接读取的规则。Caddy 默认代理所有路径。旧版回滚时必须同时恢复旧 Nginx 路由和旧发现文件。
+
+自部署未提供 CLI 下载包时页面隐藏下载入口。提供包后配置 `CLI_DOWNLOAD_URL=/downloads/xcopy/`，在代理中配置该独立目录，或使用 HTTPS 下载 URL。CLI 保留历史默认服务器行为，自部署初始化必须显式指定：
+
+```sh
+xcopy init --server https://send.example.com
+```
+
+CLI 英文说明见 [README.en.md](README.en.md#command-line-client)，完整 Go CLI 本地化另行实施。
+
+## 构建、发布与验证
+
+```sh
+npm ci
 npm run check
 npm test
 npm run test:e2e
 npm run test:relay
+# 先构建本机 CLI；通过 XCOPY_BINARY 指定它，再运行：
+npm run test:cli
 ```
 
-浏览器测试默认使用已安装的 Google Chrome。`test:relay` 需要本机 `turnserver`（coturn），会临时启动仅监听回环地址的中继并强制 relay 策略，结束后自动关闭；可用 `TURNSERVER_BIN` 指定路径。生产不能启用该测试配置的 `allow-loopback-peers`。
+类型检查包含反向契约用例；中英文词典检查键和插值参数一致性。测试入口先构建；直接启动 `test/browser-server.js` 或本地 CLI 冒烟会拒绝过期产物。浏览器测试固定中文，国际化测试显式验证英文。`test:relay` 需要本机 coturn，可通过 `TURNSERVER_BIN` 指定；只监听回环，测试结束关闭。公网 NAT、防火墙和外部 TURN TLS 仍需部署环境验收。
 
-中继回归共用生产的配额和端口配置，同时提供 UDP/TCP 地址；验证 8 个文件加文字按最多 3 项并发依次完成，并逐个比对收到的文件字节。
+构建在临时目录完成编译、资源复制、白名单和引用闭包检查，成功后替换 dist，失败保留上一份完整产物。镜像多阶段构建，运行镜像只安装运行依赖。systemd 发布也应先在构建机产生完整 release，包含 `package*.json`、`server/`、`src/shared/`、`scripts/frontend-artifact.js`、`dist/`，再安装运行依赖。不要在正在服务的 release 内逐个覆盖资源；切换完整 release 并重启应用。数据库和密钥留在独立持久目录，回滚代码不要覆盖这些数据。
 
-首次公网验收用不同网络的电脑完成配对，分别验证单发、群发、文字、截图、多文件、50 MiB、取消、失败重发和忘记配对。使用下面的 `--relay` 验收脚本在测试浏览器中强制中继，并检查内部 `data-route="relay"` 与内容一致性；收发记录不展示传输路径。本机的强制中继测试不能替代目标公网的防火墙、DNS 和 NAT 验收。
-
-### 已有 Nginx / TURN 的阿里云服务器
-
-`deploy/aliyun/` 提供本次 `https://xcopy.werfamily.fun` 部署配置：独立 Node 24 + systemd，Nginx 转发到 `127.0.0.1:18787`；独立 TURN 使用 TCP/UDP 3480 和 UDP 49220–49419，避开原有中继。模板中的地址与证书路径针对该服务器；不要原样套到其他主机。共享密钥只在服务器生成并保存在 `/etc/suichuan/`，不得将实际配置提交仓库。
-
-STUN 与 `rc-car` 网页共用阿里云现有的 `stun:t.werfamily.fun:3478`（域名指向 `106.15.176.247`），用于发现公网映射地址。客户端按 `iceTransportPolicy: all` 尝试直连；无法直连时使用随传独立的 3480 TURN 中继和服务端签发的短期凭证。STUN 地址由服务端配置下发给浏览器和 xcopy，不在客户端固定第三方公共服务。此配置只需重启 `suichuan` 生效，无需重启 `rc-car` 共用的 coturn。
-
-本机安装开发依赖后可验收已部署站点：
-
-```sh
-node scripts/smoke-deployed.js https://xcopy.werfamily.fun
-node scripts/smoke-deployed.js https://xcopy.werfamily.fun --relay
-node scripts/smoke-broadcast.js https://xcopy.werfamily.fun --relay
-node scripts/smoke-product.js https://xcopy.werfamily.fun
-```
-
-带 `--relay` 的命令仅在验收浏览器中强制中继，不修改生产服务配置。单发验收使用两个专用测试设备，群发验收使用三个，后者验证向两台接收设备发送共 18 项任务及 16 个下载文件的字节一致性；成功后删除测试配对，设备登记保留为无配对记录。
-
-`smoke-product.js` 使用两组测试配对串行验证首次命名、同名设备、目标离线保护、文件保存与离开提醒、图片复制及权限降级、多页面接收交接。用 `XCOPY_ARTIFACTS` 指定报告与截图目录；加 `--wait-release` 可在发布前完成配对，生成 `prepared.json` 后等待该目录中的 `release-ready` 文件，发布并验证 HTTPS 后再创建该文件，以复验发布前的身份和配对。每次使用新的报告目录；脚本在结束时清理测试配对。不要对生产运行完整的本地 E2E 套件或密集重跑，以免触发配对限流。
-
-### 搜索引擎抓取配置
-
-首页及 `cli/site/index.html` 提供规范网址、搜索描述和分享信息；首页包含 `WebSite` 结构化数据。`/transfer` 是操作页面，使用 `noindex, follow`，不纳入站点地图。
-
-`public/robots.txt`、`public/sitemap.xml`、`public/indexnow.txt` 由阿里云 Nginx 模板的精确路由直接提供，Node 开发服务不会提供这些路由。使用其他反向代理部署时需同样配置这三个公开文件，勿开放整个项目目录。换域名时同步修改规范网址、分享网址、结构化数据、robots 中的 Sitemap 地址和站点地图，并重新生成 IndexNow 验证文本。
-
-站点地图仅包含首页与命令行使用页。`lastmod` 只在对应页面内容实际更新时修改。`indexnow.txt` 是公开的站点验证文本，不是登录凭据或 TURN 密钥；通知接口为 `https://api.indexnow.org/indexnow`，提交时指定其 `keyLocation`。仅在公开页面发生实质变化并上线后通知，200 表示接收成功，202 表示已接收、待验证；均不代表已收录。Google Search Console、百度搜索资源平台的站点验证和主动提交需分别完成。
-
-## 源码
-
-- `server/`：身份验证、SQLite 配对、WebSocket 控制及 TURN 临时凭证。
-- `public/`：无需构建的原生模块界面、设备密钥和 WebRTC 数据传输。
-- `test/`：真实 WebSocket 服务端测试及多浏览器上下文端到端测试。
-- `deploy/`、`compose.yaml`：HTTPS 与 TURN 部署配置。
+- `src/`：前端类型、连接、传输、分享和语言包；`src/shared/device-name.js` 与后端共用纯校验。
+- `public/`：HTML/CSS、图标和独立第三方资源源文件。
+- `dist/`：生成资源和构建摘要，不提交 Git。
+- `server/`：身份、SQLite、WebSocket、配置与发现端点。
+- `test/`：单元、协议、类型、浏览器及国际化验收。
 
 许可证：MIT。

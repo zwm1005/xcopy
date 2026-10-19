@@ -10,9 +10,18 @@ services:
       TRUST_PROXY: "1"
       MAX_FILE_MB: ${MAX_FILE_MB:-50}
       PAIR_GLOBAL_LIMIT: ${PAIR_GLOBAL_LIMIT:-100}
-      TURN_URLS: ${TURN_URLS:?请设置 TURN 地址}
-      TURN_SECRET: ${TURN_SECRET:?请生成 TURN 共享密钥}
+      TURN_URLS: ${TURN_URLS:-}
+      TURN_SECRET: ${TURN_SECRET:-}
       STUN_URLS: ${STUN_URLS:-}
+      TURN_AUTH_MODE: ${TURN_AUTH_MODE:-shared-secret}
+      TURN_USERNAME: ${TURN_USERNAME:-}
+      TURN_PASSWORD: ${TURN_PASSWORD:-}
+      TURN_CREDENTIAL_TTL_SECONDS: ${TURN_CREDENTIAL_TTL_SECONDS:-3600}
+      DEFAULT_LOCALE: ${DEFAULT_LOCALE:-zh-CN}
+      CLI_DOWNLOAD_URL: ${CLI_DOWNLOAD_URL:-}
+      INDEXNOW_KEY: ${INDEXNOW_KEY:-}
+      SHARE_CONCURRENCY: ${SHARE_CONCURRENCY:-3}
+      SHARE_QUEUE_LIMIT: ${SHARE_QUEUE_LIMIT:-20}
       FORCE_RELAY: ${FORCE_RELAY:-0}
     volumes:
       - app-data:/data
@@ -40,21 +49,6 @@ services:
     depends_on:
       app:
         condition: service_healthy
-  turn:
-    image: coturn/coturn:latest
-    restart: unless-stopped
-    # 公网 Linux 主机使用 host 网络，避免媒体端口的大量 Docker NAT 映射。
-    network_mode: host
-    entrypoint: ["/bin/sh", "/opt/suichuan/turn-entrypoint.sh"]
-    environment:
-      TURN_SECRET: ${TURN_SECRET:?请生成 TURN 共享密钥}
-      TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP:?请设置中继服务器公网 IPv4}
-      TURN_REALM: ${TURN_REALM:?请设置 TURN realm}
-    volumes:
-      - ./deploy/turn-entrypoint.sh:/opt/suichuan/turn-entrypoint.sh:ro
-      - ./deploy/turn-limits.conf:/opt/suichuan/turn-limits.conf:ro
-    security_opt:
-      - no-new-privileges:true
 volumes:
   app-data:
   caddy-data:

@@ -6,12 +6,12 @@
   <meta name="description" content="随传 XCopy 命令行客户端：让 Linux 服务器、Debian 和树莓派与电脑浏览器双向传输文件和文字。提供 amd64、arm64 下载、安装和配对教程，支持后台常驻接收。">
   <title>随传 XCopy 命令行 - Linux、树莓派文件传输与安装教程</title>
   <meta name="robots" content="index, follow">
-  <link rel="canonical" href="https://xcopy.werfamily.fun/downloads/xcopy/">
+  <link rel="canonical" href="https://send.example.com/downloads/xcopy/">
   <link rel="icon" href="/icon.svg?v=20261018-brand" type="image/svg+xml">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="随传 XCopy">
   <meta property="og:locale" content="zh_CN">
-  <meta property="og:url" content="https://xcopy.werfamily.fun/downloads/xcopy/">
+  <meta property="og:url" content="https://send.example.com/downloads/xcopy/">
   <meta property="og:title" content="随传 XCopy 命令行 - Linux、树莓派文件传输">
   <meta property="og:description" content="让 Linux 和树莓派与浏览器双向传输文件和文字。提供 amd64、arm64 下载及安装、配对和后台接收教程。">
   <style>
@@ -39,7 +39,8 @@
     @media(prefers-color-scheme:dark) { :root { --bg:#151714; --ink:#e7eae3; --muted:#a2a99d; --line:#353b31; --panel:#1d211a; --green:#77c88d } }
   </style>
 </head>
-<body><main>
+<body>
+<p><a href="./en.html" lang="en">English guide</a></p><main>
   <nav><a class="brand" href="/">随传 / xcopy</a><a href="/transfer">打开浏览器传输页 ↗</a></nav>
   <p class="eyebrow">XCOPY CLI · v0.1.2</p>
   <h1>没有桌面，也能随手传。</h1>
@@ -51,8 +52,8 @@
   <p class="small">运行 <code>uname -m</code> 查看架构。暂不支持 32 位 ARM 系统。 <a href="v0.1.2/SHA256SUMS">SHA-256 校验文件</a> · <a href="v0.1.2/README.md">完整中文说明</a></p>
   <h2>1. 安装客户端</h2>
   <p>以下以树莓派 arm64 为例；x86_64 主机把命令中的 <code>arm64</code> 换为 <code>amd64</code>。</p>
-  <pre><code>curl -fLO https://xcopy.werfamily.fun/downloads/xcopy/v0.1.2/xcopy_0.1.2_linux_arm64.tar.gz
-curl -fLO https://xcopy.werfamily.fun/downloads/xcopy/v0.1.2/SHA256SUMS
+  <pre><code>curl -fLO https://send.example.com/downloads/xcopy/v0.1.2/xcopy_0.1.2_linux_arm64.tar.gz
+curl -fLO https://send.example.com/downloads/xcopy/v0.1.2/SHA256SUMS
 sha256sum --ignore-missing -c SHA256SUMS
 tar -xzf xcopy_0.1.2_linux_arm64.tar.gz
 cd xcopy_0.1.2_linux_arm64

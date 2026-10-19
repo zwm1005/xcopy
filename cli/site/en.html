@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>XCopy CLI guide</title><meta name="robots" content="noindex,follow"></head><body>
+<main><h1>XCopy command-line client</h1><p><a href="./index.html" lang="zh-CN">简体中文</a></p>
+<p>Use XCopy on Linux servers and Raspberry Pi to send files and text to paired browsers. Obtain the package and SHA256SUMS from your service administrator, verify the checksum, then extract the archive and place the executable on your PATH. Select the package matching your operating system and architecture.</p>
+<h2>Use your own server</h2><pre><code>xcopy init --server https://send.example.com
+xcopy serve</code></pre><p>Replace the example origin with your administrator's HTTPS URL. The older CLI default server remains for compatibility; always specify --server for self-hosting. Run <code>xcopy --help</code> for pairing and send/receive commands. Keep the daemon online while transferring and configure its receive directory before sending files to it.</p>
+<p>The CLI and browser obtain STUN/TURN configuration from the same application server. Do not copy the server's TURN shared secret into a client. Received files are saved locally; pairing and device credentials belong to your local CLI profile.</p>
+</main></body></html>

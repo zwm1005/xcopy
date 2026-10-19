@@ -1,11 +1,11 @@
 # 独立实例；不占用已有 coturn 的 3478 / 49160-49200。
 listening-port=3480
-listening-ip=172.27.28.244
-relay-ip=172.27.28.244
-external-ip=106.15.176.247/172.27.28.244
+listening-ip=192.0.2.10
+relay-ip=192.0.2.10
+external-ip=198.51.100.10/192.0.2.10
 min-port=49220
 max-port=49419
-realm=xcopy.werfamily.fun
+realm=send.example.com
 use-auth-secret
 static-auth-secret=REPLACE_ON_SERVER
 fingerprint

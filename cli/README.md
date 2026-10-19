@@ -1,6 +1,6 @@
 # xcopy 命令行客户端
 
-`xcopy` 用于没有图形界面的 Linux、Debian、Ubuntu 和树莓派，和 [浏览器传输页面](https://xcopy.werfamily.fun/transfer) 双向传输文字与文件。首期提供 Linux amd64 / arm64 静态单文件，无需 Node.js、浏览器或桌面环境。32 位树莓派系统暂不支持；`uname -m` 应显示 `aarch64`。
+`xcopy` 用于没有图形界面的 Linux、Debian、Ubuntu 和树莓派，和 [浏览器传输页面](https://send.example.com/transfer) 双向传输文字与文件。首期提供 Linux amd64 / arm64 静态单文件，无需 Node.js、浏览器或桌面环境。32 位树莓派系统暂不支持；`uname -m` 应显示 `aarch64`。
 
 ## 安装与常驻
 
@@ -93,3 +93,7 @@ sh build.sh
 ```
 
 仓库根目录执行 `node scripts/smoke-cli.js`，会启动隔离服务与 CLI，实际驱动 Chrome 完成配对、双向文字/文件、空文件、图片、取消重试和身份持久化验证。`XCOPY_LARGE=1` 包含 50 MiB 边界文件。远端已运行后台时，可用 `XCOPY_REMOTE`、`XCOPY_REMOTE_BIN`、`XCOPY_SSH_ARGS` 指定实机；`XCOPY_FORCE_RELAY=1` 强制浏览器走 TURN。测试仅解除自己创建的配对关系，验收文件会保留在指定接收目录。
+
+## 自部署与英文说明
+
+本页示例域名需要替换。旧 CLI 保留历史默认服务器，自部署初始化必须使用 `xcopy init --server https://send.example.com` 指定自己的服务。网页英文使用说明见 [English guide](site/en.html)。
