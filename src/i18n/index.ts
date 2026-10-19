@@ -1,0 +1,107 @@
+import zh from './zh-CN.js';
+import en from './en.js';
+import { isMessageKey } from './messages.js';
+import type { MessageArgs, MessageKey, MessageParams } from './messages.js';
+export type Locale = 'zh-CN' | 'en';
+export interface ClientConfig { defaultLocale: Locale; supportedLocales: Locale[]; cliDownloadUrl: string | null }
+let locale: Locale = 'zh-CN';
+const listeners = new Set<() => void>();
+export const currentLocale = () => locale;
+export function normalizeLocale(value: string | null | undefined): Locale | undefined {
+  if (/^zh(?:-|$)/i.test(value || '')) {
+    return 'zh-CN';
+  }
+  if (/^en(?:-|$)/i.test(value || '')) {
+    return 'en';
+  }
+  return undefined;
+}
+export function chooseLocale(url: string | null, saved: string | null, languages: readonly string[], fallback: string): Locale {
+  return normalizeLocale(url) || normalizeLocale(saved) || languages.map(normalizeLocale).find(Boolean) || normalizeLocale(fallback) || 'zh-CN';
+}
+export function translate(key: string, params: MessageParams = {}): string {
+  if (!isMessageKey(key)) {
+    return locale === 'en' ? 'Unable to complete the operation. Please try again.' : '操作未完成，请重试。';
+  }
+  let message: string = (locale === 'en' ? en : zh)[key];
+  if (locale === 'en') {
+    const plural = new Intl.PluralRules(locale);
+    message = message.replace(/\{(\w+)\} (files|devices|items|claims|minutes|recipients)/g, (match, name: string, noun: string) => plural.select(Number(params[name])) === 'one' ? `{${name}} ${noun.slice(0, -1)}` : match);
+  }
+  return message.replace(/\{(\w+)\}/g, (match, name: string) => String(params[name] ?? match));
+}
+export function t<K extends MessageKey>(key: K, ...args: MessageArgs<K>): string {
+  return translate(key, args[0]);
+}
+export function onLocaleChange(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+export function applyTranslations(root: ParentNode = document): void {
+  for (const element of root.querySelectorAll<HTMLElement>('[data-i18n]')) {
+    element.textContent = translate(element.dataset.i18n || '');
+  }
+  for (const attribute of ['aria-label', 'placeholder', 'title', 'alt', 'data-tooltip', 'content']) {
+    for (const element of root.querySelectorAll(`[data-i18n-${attribute}]`)) {
+      element.setAttribute(attribute, translate(element.getAttribute(`data-i18n-${attribute}`) || ''));
+    }
+  }
+  for (const template of root.querySelectorAll('template')) {
+    applyTranslations(template.content);
+  }
+}
+export function setLocale(next: Locale, persist = true): void {
+  locale = next;
+  if (typeof document === 'undefined') {
+    return;
+  }
+  document.documentElement.lang = locale;
+  applyTranslations();
+  for (const select of document.querySelectorAll<HTMLSelectElement>('[data-locale]')) {
+    select.value = locale;
+  }
+  document.querySelector('meta[property="og:locale"]')?.setAttribute('content', locale === 'en' ? 'en_US' : 'zh_CN');
+  if (persist) {
+    try {
+      localStorage.setItem('suichuan-locale', locale);
+    } catch { /* Private browsing may disable storage. */ }
+    const url = new URL(location.href);
+    if (url.searchParams.has('lang')) {
+      url.searchParams.set('lang', locale);
+      history.replaceState(history.state, '', url);
+    }
+  }
+  for (const listener of listeners) {
+    listener();
+  }
+}
+export async function initI18n(): Promise<void> {
+  let config: ClientConfig = { defaultLocale: 'zh-CN', supportedLocales: ['zh-CN', 'en'], cliDownloadUrl: null };
+  try {
+    const response = await fetch('/api/client-config', { signal: AbortSignal.timeout(3000), cache: 'no-store' });
+    const data: unknown = await response.json();
+    if (typeof data === 'object' && data !== null && 'defaultLocale' in data && typeof data.defaultLocale === 'string') {
+      config.defaultLocale = normalizeLocale(data.defaultLocale) || 'zh-CN';
+      if ('cliDownloadUrl' in data && typeof data.cliDownloadUrl === 'string') {
+        const url = new URL(data.cliDownloadUrl, location.origin);
+        if (url.protocol === 'https:' || (url.origin === location.origin && url.protocol === 'http:')) {
+          config.cliDownloadUrl = url.href;
+        }
+      }
+    }
+  } catch { /* The application can start with the built-in locales while offline. */ }
+  let saved: string | null = null;
+  try {
+    saved = localStorage.getItem('suichuan-locale');
+  } catch { /* Locale persistence is optional. */ }
+  setLocale(chooseLocale(new URL(location.href).searchParams.get('lang'), saved, navigator.languages, config.defaultLocale), false);
+  for (const select of document.querySelectorAll<HTMLSelectElement>('[data-locale]')) {
+    select.addEventListener('change', () => setLocale(normalizeLocale(select.value) || 'zh-CN'));
+  }
+  for (const link of document.querySelectorAll<HTMLAnchorElement>('[data-cli-download]')) {
+    link.hidden = !config.cliDownloadUrl;
+    if (config.cliDownloadUrl) {
+      link.href = config.cliDownloadUrl;
+    }
+  }
+}

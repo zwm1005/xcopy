@@ -1,3 +1,7 @@
+import { assets } from './assets.js';
+import { discovery, pageMetadata } from './discovery.js';
+import { messageDescriptor } from './messages.js';
+import { assertFrontend } from '../scripts/frontend-artifact.js';
 import { createServer } from 'node:http';
 import { createHash, createHmac, createPublicKey, randomBytes, randomInt, verify } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -7,9 +11,9 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { Store } from './store.js';
 import { loadConfig } from './config.js';
 import { createShares } from './shares.js';
-import { validDeviceName } from '../public/device-name.js';
+import { validDeviceName } from '../src/shared/device-name.js';
 
-const publicDir = fileURLToPath(new URL('../public/', import.meta.url));
+const publicDir = fileURLToPath(new URL('../dist/public/', import.meta.url));
 const randomId = () => randomBytes(32).toString('base64url');
 const terminal = new Set(['completed', 'failed', 'cancelled']);
 const mimeTypes = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml' };
@@ -104,8 +108,8 @@ export function createApp(overrides = {}) {
   function iceServers(id, allowRelay = true) {
     const result = config.stunUrls.length ? [{ urls: config.stunUrls }] : [];
     if (allowRelay && config.turnUrls.length) {
-      const username = `${Math.floor(now() / 1000) + 3600}:${id.slice(0, 16)}`;
-      const credential = createHmac('sha1', config.turnSecret).update(username).digest('base64');
+      const username = config.turnAuthMode === 'static' ? config.turnUsername : `${Math.floor(now() / 1000) + config.turnCredentialTtlSeconds}:${id.slice(0, 16)}`;
+      const credential = config.turnAuthMode === 'static' ? config.turnPassword : createHmac('sha1', config.turnSecret).update(username).digest('base64');
       result.push({ urls: config.turnUrls, username, credential });
     }
     return result;
@@ -118,8 +122,8 @@ export function createApp(overrides = {}) {
     t.status = status;
     t.reason = reason;
     t.updated = now();
-    send(t.sender, 'transfer.state', { id: t.id, status, reason });
-    send(t.receiver, 'transfer.state', { id: t.id, status, reason });
+    send(t.sender, 'transfer.state', { id: t.id, status, reason, ...messageDescriptor(reason, 'reason') });
+    send(t.receiver, 'transfer.state', { id: t.id, status, reason, ...messageDescriptor(reason, 'reason') });
     if (t.shareId) {
       shares.finished(t);
     }
@@ -382,8 +386,15 @@ export function createApp(overrides = {}) {
       res.writeHead(200, { 'Content-Type': 'application/json' }).end('{"ok":true}');
       return;
     }
+    if (path === '/api/client-config') {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }).end(req.method === 'HEAD' ? undefined : JSON.stringify({ defaultLocale: config.defaultLocale, supportedLocales: ['zh-CN', 'en'], cliDownloadUrl: config.cliDownloadUrl || null }));
+      return;
+    }
+    if (discovery(path, req, res, config)) {
+      return;
+    }
     // Explicit allowlist: never expose the SQLite database, env file or source tree.
-    const files = new Set(['/index.html', '/transfer.html', '/home.js', '/home.css', '/app.js', '/identity.js', '/connection.js', '/device-name.js', '/transfer.js', '/styles.css', '/icon.svg', '/share.html', '/share.js', '/share.css', '/share-ui.js', '/qrcode.js', '/archive.js', '/vendor/noble-hashes/sha2.js', '/vendor/noble-hashes/_md.js', '/vendor/noble-hashes/_u64.js', '/vendor/noble-hashes/utils.js']);
+    const files = assets;
     const pages = { '/': '/index.html', '/transfer': '/transfer.html', '/transfer/': '/transfer.html', '/s': '/share.html', '/s/': '/share.html' };
     const file = Object.hasOwn(pages, path) ? pages[path] : path;
     if (!files.has(file)) {
@@ -392,7 +403,7 @@ export function createApp(overrides = {}) {
     }
     try {
       const content = await readFile(resolve(publicDir, `.${file}`));
-      res.writeHead(200, { 'Content-Type': mimeTypes[extname(file)] }).end(req.method === 'HEAD' ? undefined : content);
+      res.writeHead(200, { 'Content-Type': mimeTypes[extname(file)] || 'text/plain; charset=utf-8' }).end(req.method === 'HEAD' ? undefined : pageMetadata(content, file, config));
     } catch {
       res.writeHead(500).end('Service unavailable');
     }
@@ -430,7 +441,7 @@ export function createApp(overrides = {}) {
         ws.send(JSON.stringify({ replyTo: message.id, ok: true, data }));
       } catch (error) {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ replyTo: message?.id, ok: false, error: { code: error instanceof ClientError ? error.code : 'INVALID', message: error instanceof ClientError ? error.message : '请求无法处理' } }));
+          ws.send(JSON.stringify({ replyTo: message?.id, ok: false, error: { code: error instanceof ClientError ? error.code : 'INVALID', message: error instanceof ClientError ? error.message : '请求无法处理', ...messageDescriptor(error instanceof ClientError ? error.message : '请求无法处理') } }));
         }
       }
     });
@@ -520,6 +531,7 @@ export function createApp(overrides = {}) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await assertFrontend();
   const app = createApp();
   await app.listen();
   console.log(`随传已启动：${app.config.origin}`);

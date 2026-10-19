@@ -1,3 +1,4 @@
+import { messageDescriptor } from './messages.js';
 import { randomBytes } from 'node:crypto';
 import { WebSocket } from 'ws';
 
@@ -24,7 +25,7 @@ export function createShares({ config, now, requireThat, rate, send, transfers, 
     const waiting = live(s).filter((entry) => entry.state === 'queued');
     return { id: c.id, state: c.state, recipientName: c.recipientName, acceptedAt: c.acceptedAt, deadline: c.deadline,
       position: c.state === 'queued' ? waiting.indexOf(c) + 1 : 0, attempt: c.attempt || 0,
-      files: c.files.map((f, index) => ({ index, completed: f.completed })), reason: c.reason || '' };
+      files: c.files.map((f, index) => ({ index, completed: f.completed })), reason: c.reason || '', ...messageDescriptor(c.reason || '', 'reason') };
   }
 
   function snapshot(s, ws) {

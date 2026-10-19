@@ -4,22 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<meta name="description" content="随传 XCopy 是简单、极速、安全的跨设备文件传输工具。免安装、免注册，在已配对的电脑间互传文字、截图和小文件；优先 P2P 点对点直传，无法直连才中转，服务器不留存传输内容。">
-<title>随传 XCopy - 跨设备文件传输、文字与截图快传</title>
+<meta name="description" content="随传 XCopy 是简单、极速、安全的跨设备文件传输工具。免安装、免注册，在已配对的电脑间互传文字、截图和小文件；优先 P2P 点对点直传，无法直连才中转，服务器不留存传输内容。" data-i18n-content="page.xcopy.transfers.text.screenshots.and.files.between.paired">
+<title data-i18n="page.xcopy.files.text.and.screenshots.across.devices">随传 XCopy - 跨设备文件传输、文字与截图快传</title>
 <meta name="robots" content="index, follow">
-<link rel="canonical" href="https://xcopy.werfamily.fun/">
+
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="随传 XCopy">
+<meta property="og:site_name" content="随传 XCopy" data-i18n-content="page.xcopy">
 <meta property="og:locale" content="zh_CN">
-<meta property="og:url" content="https://xcopy.werfamily.fun/">
-<meta property="og:title" content="随传 XCopy - 简单、极速、安全的跨设备快传">
-<meta property="og:description" content="免安装、免注册，在配对设备间互传文字、截图和小文件。优先 P2P 直传，中转不留存传输内容。">
-<script type="application/ld+json">
-{"@context":"https://schema.org","@type":"WebSite","name":"随传","alternateName":["随传 XCopy","XCopy"],"url":"https://xcopy.werfamily.fun/","inLanguage":"zh-CN"}
-</script>
+
+<meta property="og:title" content="随传 XCopy - 简单、极速、安全的跨设备快传" data-i18n-content="page.xcopy.simple.fast.and.secure.transfers">
+<meta property="og:description" content="免安装、免注册，在配对设备间互传文字、截图和小文件。优先 P2P 直传，中转不留存传输内容。" data-i18n-content="page.transfer.text.screenshots.and.files.between.paired.devices">
+
 <link rel="icon" href="/icon.svg?v=20261018-brand" type="image/svg+xml">
 <link rel="stylesheet" href="/home.css?v=20261018-xcopy-cli">
 <script type="module" src="/home.js"></script>
+<link rel="stylesheet" href="/i18n.css">
 </head>
 <body>
 <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -37,65 +36,65 @@
 </svg>
 <div class="home">
   <header class="site-header">
-    <a class="brand" href="/" aria-label="随传首页"><svg class="brand-mark" viewBox="0 0 128 84" aria-hidden="true"><use href="/icon.svg?v=20261018-brand#mark"/></svg><span class="brand-name">随传<small>XCOPY</small></span></a>
-    <nav aria-label="首页导航"><a class="quiet-link how-link" href="#why">为什么随传</a><a class="quiet-link faq-link" href="#questions">常见问题</a><a class="button header-start" href="/transfer">打开随传 <svg class="icon" aria-hidden="true"><use href="#i-up-right"/></svg></a></nav>
-  </header>
+    <a class="brand" href="/" aria-label="随传首页" data-i18n-aria-label="page.xcopy.home"><svg class="brand-mark" viewBox="0 0 128 84" aria-hidden="true"><use href="/icon.svg?v=20261018-brand#mark"/></svg><span class="brand-name"><span data-i18n="page.xcopy.alt">随传</span><small>XCOPY</small></span></a>
+    <nav aria-label="首页导航" data-i18n-aria-label="page.home.navigation"><a class="quiet-link how-link" href="#why"><span data-i18n="page.why.xcopy">为什么随传</span></a><a class="quiet-link faq-link" href="#questions"><span data-i18n="page.faq">常见问题</span></a><a class="button header-start" href="/transfer"><span data-i18n="page.open.xcopy">打开随传</span> <svg class="icon" aria-hidden="true"><use href="#i-up-right"/></svg></a></nav>
+  <label class="locale-picker"><span data-i18n="language.label">语言</span><select data-locale aria-label="Language"><option value="zh-CN">简体中文</option><option value="en">English</option></select></label></header>
   <main>
     <section class="hero" aria-labelledby="home-title">
-      <p class="eyebrow">简单 · 极速 · 安全快传</p>
-      <h1 id="home-title" aria-label="这边复制，那边继续。"><span class="typewriter-line typewriter-first" aria-hidden="true"><span class="typewriter-text">这边复制，</span><span class="typewriter-cursor">_</span></span><br><span class="typewriter-line typewriter-last" aria-hidden="true"><span class="typewriter-text">那边继续。</span><span class="typewriter-cursor">_</span></span></h1>
-      <p class="hero-description">文字、截图、小文件，随手传到另一台电脑。<br>打开网页，配对设备，接着做你的事。</p>
-      <div class="hero-actions"><a class="button" href="/transfer">开始传输 <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></div>
-      <p class="hero-note">免安装 · 免注册 · 优先 P2P 直传</p>
+      <p class="eyebrow"><span data-i18n="page.simple.fast.secure.transfers">简单 · 极速 · 安全快传</span></p>
+      <h1 id="home-title" aria-label="这边复制，那边继续。" data-i18n-aria-label="page.copy.here.continue.there"><span class="typewriter-line typewriter-first" aria-hidden="true"><span class="typewriter-text"><span data-i18n="page.copy.here">这边复制，</span></span><span class="typewriter-cursor">_</span></span><br><span class="typewriter-line typewriter-last" aria-hidden="true"><span class="typewriter-text"><span data-i18n="page.continue.there">那边继续。</span></span><span class="typewriter-cursor">_</span></span></h1>
+      <p class="hero-description"><span data-i18n="page.send.text.screenshots.and.files.to.another.computer">文字、截图、小文件，随手传到另一台电脑。</span><br><span data-i18n="page.open.the.page.pair.your.devices.and.keep">打开网页，配对设备，接着做你的事。</span></p>
+      <div class="hero-actions"><a class="button" href="/transfer"><span data-i18n="page.start.transferring">开始传输</span> <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></div>
+      <p class="hero-note"><span data-i18n="page.no.installation.no.account.p2p.first">免安装 · 免注册 · 优先 P2P 直传</span></p>
     </section>
-    <section class="demo" id="demo" aria-label="传输过程演示" data-demo>
+    <section class="demo" id="demo" aria-label="传输过程演示" data-demo data-i18n-aria-label="page.transfer.demonstration">
       <div class="demo-toolbar">
-        <div class="demo-tabs" role="tablist" aria-label="演示内容类型">
-          <button type="button" id="tab-text" role="tab" aria-controls="demo-panel" aria-selected="true" data-type="text">文字</button>
-          <button type="button" id="tab-image" role="tab" aria-controls="demo-panel" aria-selected="false" tabindex="-1" data-type="image">截图</button>
-          <button type="button" id="tab-file" role="tab" aria-controls="demo-panel" aria-selected="false" tabindex="-1" data-type="file">文件</button>
+        <div class="demo-tabs" role="tablist" aria-label="演示内容类型" data-i18n-aria-label="page.demo.content.type">
+          <button type="button" id="tab-text" role="tab" aria-controls="demo-panel" aria-selected="true" data-type="text"><span data-i18n="home.text">文字</span></button>
+          <button type="button" id="tab-image" role="tab" aria-controls="demo-panel" aria-selected="false" tabindex="-1" data-type="image"><span data-i18n="home.screenshot">截图</span></button>
+          <button type="button" id="tab-file" role="tab" aria-controls="demo-panel" aria-selected="false" tabindex="-1" data-type="file"><span data-i18n="home.file">文件</span></button>
         </div>
-        <button type="button" class="playback" data-playback aria-label="暂停演示" hidden><svg class="icon" aria-hidden="true"><use href="#i-pause"/></svg><span data-playback-label>自动演示</span></button>
+        <button type="button" class="playback" data-playback aria-label="暂停演示" hidden data-i18n-aria-label="home.pause.demo"><svg class="icon" aria-hidden="true"><use href="#i-pause"/></svg><span data-playback-label><span data-i18n="home.automatic.demo">自动演示</span></span></button>
       </div>
       <div class="demo-flow" id="demo-panel" role="tabpanel" aria-labelledby="tab-text" data-phase="ready">
         <div class="device-window">
-          <div class="window-bar"><span><svg class="icon" aria-hidden="true"><use href="#i-laptop"/></svg>我的 MacBook</span><span class="window-dots" aria-hidden="true"><b></b><b></b><b></b></span></div>
-          <div class="composer"><div class="demo-content" data-send-content>会议改到下午三点，<br>记得带上修改后的方案。</div><div class="send-row"><span class="device-target"><svg class="icon" aria-hidden="true"><use href="#i-link"/></svg>办公电脑 · 已配对</span><button type="button" class="button demo-send" data-demo-send hidden><span data-send-label>发送</span><svg class="icon" aria-hidden="true"><use href="#i-up-right"/></svg></button></div></div>
+          <div class="window-bar"><span><svg class="icon" aria-hidden="true"><use href="#i-laptop"/></svg><span data-i18n="page.my.macbook">我的 MacBook</span></span><span class="window-dots" aria-hidden="true"><b></b><b></b><b></b></span></div>
+          <div class="composer"><div class="demo-content" data-send-content><span data-i18n="page.the.meeting.moved.to.3.pm">会议改到下午三点，</span><br><span data-i18n="page.remember.to.bring.the.updated.proposal">记得带上修改后的方案。</span></div><div class="send-row"><span class="device-target"><svg class="icon" aria-hidden="true"><use href="#i-link"/></svg><span data-i18n="page.office.computer.paired">办公电脑 · 已配对</span></span><button type="button" class="button demo-send" data-demo-send hidden><span data-send-label><span data-i18n="home.send">发送</span></span><svg class="icon" aria-hidden="true"><use href="#i-up-right"/></svg></button></div></div>
         </div>
         <div class="connector" aria-hidden="true"><svg class="icon"><use href="#i-arrow"/></svg><span class="travel-dot"></span></div>
         <div class="device-window">
-          <div class="window-bar"><span><svg class="icon" aria-hidden="true"><use href="#i-monitor"/></svg>办公电脑</span><span>在线</span></div>
-          <div class="inbox"><div class="inbox-empty" data-empty><svg class="icon" aria-hidden="true"><use href="#i-inbox"/></svg><span data-empty-label>已准备好接收</span><small>发送后，内容会出现在这里。</small></div><div class="received" data-received hidden><span class="receipt-label"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>已收到 · 来自我的 MacBook</span><div class="receipt-content" data-received-content></div></div></div>
+          <div class="window-bar"><span><svg class="icon" aria-hidden="true"><use href="#i-monitor"/></svg><span data-i18n="page.office.computer">办公电脑</span></span><span><span data-i18n="app.online">在线</span></span></div>
+          <div class="inbox"><div class="inbox-empty" data-empty><svg class="icon" aria-hidden="true"><use href="#i-inbox"/></svg><span data-empty-label><span data-i18n="home.ready.to.receive">已准备好接收</span></span><small><span data-i18n="page.content.appears.here.after.sending">发送后，内容会出现在这里。</span></small></div><div class="received" data-received hidden><span class="receipt-label"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><span data-i18n="page.received.from.my.macbook">已收到 · 来自我的 MacBook</span></span><div class="receipt-content" data-received-content></div></div></div>
         </div>
       </div>
-      <div class="demo-foot"><span>交互演示，不会实际传输</span><span>实际传输时，双方需保持传输页打开。</span></div>
+      <div class="demo-foot"><span><span data-i18n="page.interactive.demo.no.content.is.transferred">交互演示，不会实际传输</span></span><span><span data-i18n="page.keep.both.transfer.pages.open.during.real.transfers">实际传输时，双方需保持传输页打开。</span></span></div>
       <span class="sr-only" data-demo-announcement role="status" aria-live="polite"></span>
-      <noscript><p class="no-script">开启 JavaScript 可播放传输演示；使用随传也需要浏览器支持 JavaScript。</p></noscript>
+      <noscript><p class="no-script"><span data-i18n="page.enable.javascript.to.play.this.demo.xcopy.also">开启 JavaScript 可播放传输演示；使用随传也需要浏览器支持 JavaScript。</span></p></noscript>
     </section>
-    <section class="steps" id="why" aria-label="为什么选择随传">
-      <div class="step"><span class="step-number">01</span><h2>简单，打开网页就能用</h2><p>免安装、免注册，配对后即可发送。<br>配对一次，之后直接选在线设备。</p></div>
-      <div class="step"><span class="step-number">02</span><h2>极速，优先设备间直传</h2><p>优先 P2P 点对点传输，内容直达对方。<br>无需先存云盘，再让对方下载。</p></div>
-      <div class="step"><span class="step-number">03</span><h2>安全，只连你认可的设备</h2><p>新配对需对方确认，只向已配对设备发送。<br>直连失败才中转，服务器不留存传输内容。</p></div>
+    <section class="steps" id="why" aria-label="为什么选择随传" data-i18n-aria-label="page.why.choose.xcopy">
+      <div class="step"><span class="step-number">01</span><h2><span data-i18n="page.simple.just.open.the.page">简单，打开网页就能用</span></h2><p><span data-i18n="page.no.installation.or.account.pair.your.devices.to">免安装、免注册，配对后即可发送。</span><br><span data-i18n="page.pair.once.then.select.an.online.device">配对一次，之后直接选在线设备。</span></p></div>
+      <div class="step"><span class="step-number">02</span><h2><span data-i18n="page.fast.direct.device.transfers">极速，优先设备间直传</span></h2><p><span data-i18n="page.p2p.sends.content.straight.to.the.other.device">优先 P2P 点对点传输，内容直达对方。</span><br><span data-i18n="page.no.cloud.upload.followed.by.a.separate.download">无需先存云盘，再让对方下载。</span></p></div>
+      <div class="step"><span class="step-number">03</span><h2><span data-i18n="page.secure.you.choose.who.connects">安全，只连你认可的设备</span></h2><p><span data-i18n="page.new.pairings.require.confirmation.send.only.to.paired">新配对需对方确认，只向已配对设备发送。</span><br><span data-i18n="page.relay.is.used.when.direct.connections.fail.content">直连失败才中转，服务器不留存传输内容。</span></p></div>
     </section>
     <section class="questions" id="questions" aria-labelledby="privacy-title">
-      <div class="privacy-intro"><h2 id="privacy-title">随手快传，<br>安心继续。</h2><p>连接哪些设备，由你决定。<br>配对长期保留，只有手动忘记才解除。</p></div>
+      <div class="privacy-intro"><h2 id="privacy-title"><span data-i18n="page.send.in.a.moment">随手快传，</span><br><span data-i18n="page.keep.going.with.confidence">安心继续。</span></h2><p><span data-i18n="page.you.decide.which.devices.connect">连接哪些设备，由你决定。</span><br><span data-i18n="page.pairings.remain.until.you.explicitly.forget.them">配对长期保留，只有手动忘记才解除。</span></p></div>
       <div class="faq-list">
-        <details><summary>第一次使用，怎么传？</summary><p>两台电脑打开随传的传输页，输入对方的 8 位连接码，对方确认后即可完成配对。选择在线设备，粘贴文字、截图或添加文件，点击发送即可。双方需保持传输页打开。</p></details>
-        <details><summary>支持 Windows、Mac 和 Linux 之间互传吗？</summary><p>Windows 和 Mac 电脑可使用 Chrome 或 Edge 打开网页版，配对后互传文件、文字和截图。Linux 服务器和树莓派可安装 <a href="/downloads/xcopy/">xcopy 命令行客户端</a>，与浏览器双向传输文件和文字；接收内容保存到指定目录。双方均需在线。</p></details>
-        <details><summary>传输速度有多快？</summary><p>随传优先在两台设备之间通过 P2P 直传，无需先上传到云盘，再让对方下载。实际速度取决于双方网络、连接方式和文件大小；无法直连时会通过服务器中转。</p></details>
-        <details><summary>能一次发给多台设备吗？</summary><p>可以。选择「全部在线设备」即可群发，也可以选择一台设备单发。群发只发送给点击发送时，与本机直接配对且在线的设备。</p></details>
-        <details><summary>连接码更新，还能继续传吗？</summary><p>可以。连接码只用于发起新配对，更新或过期不会解除已有配对。配对关系长期保留，只有手动忘记才会解除。忘记设备前，双方的传输任务需先结束。</p></details>
-        <details><summary>重新打开浏览器，需要重新配对吗？</summary><p>同一浏览器配置、同一网址且站点数据保留时，一般不需要。换浏览器、换配置或清除站点数据后，需要重新配对。</p></details>
-        <details><summary>内容会保存在哪里？</summary><p>文字、截图和文件优先通过 P2P 在两台设备之间点对点直传。无法直连时（例如打洞失败），才通过服务器中转；中转服务器只负责转发，不保存或留存任何文件内容。</p><p>收到的内容暂存在接收端当前页面中。刷新或关闭页面前，请保存需要的文件、复制需要的文字。</p><p>为记住已配对设备，服务端会保存设备信息和配对关系，但不保存传输内容。</p></details>
-        <details><summary>不在同一个 Wi-Fi 下，也能传吗？</summary><p>可以。随传优先尝试 P2P 点对点直传，打洞失败、无法直连时使用服务器中转，中转不留存文件。双方需要联网，并保持随传的传输页打开。</p></details>
-        <details><summary>文件大小有限制吗？</summary><p>单个文件上限 50 MiB，一次最多 8 个。传输期间请保持双方的传输页打开。</p></details>
+        <details><summary><span data-i18n="page.how.do.i.send.something.for.the.first">第一次使用，怎么传？</span></summary><p><span data-i18n="page.open.xcopy.on.both.computers.enter.the.other">两台电脑打开随传的传输页，输入对方的 8 位连接码，对方确认后即可完成配对。选择在线设备，粘贴文字、截图或添加文件，点击发送即可。双方需保持传输页打开。</span></p></details>
+        <details><summary><span data-i18n="page.can.windows.mac.and.linux.exchange.files">支持 Windows、Mac 和 Linux 之间互传吗？</span></summary><p><span data-i18n="page.windows.and.mac.users.can.open.xcopy.in">Windows 和 Mac 电脑可使用 Chrome 或 Edge 打开网页版，配对后互传文件、文字和截图。Linux 服务器和树莓派可安装</span> <a data-cli-download hidden href="/downloads/xcopy/"><span data-i18n="page.xcopy.command.line.client">xcopy 命令行客户端</span></a><span data-i18n="page.to.exchange.text.and.files.with.browsers.and">，与浏览器双向传输文件和文字；接收内容保存到指定目录。双方均需在线。</span></p></details>
+        <details><summary><span data-i18n="page.how.fast.are.transfers">传输速度有多快？</span></summary><p><span data-i18n="page.xcopy.prefers.direct.p2p.transfers.without.uploading.to">随传优先在两台设备之间通过 P2P 直传，无需先上传到云盘，再让对方下载。实际速度取决于双方网络、连接方式和文件大小；无法直连时会通过服务器中转。</span></p></details>
+        <details><summary><span data-i18n="page.can.i.send.to.several.devices.at.once">能一次发给多台设备吗？</span></summary><p><span data-i18n="page.yes.select.all.online.devices.to.broadcast.or">可以。选择「全部在线设备」即可群发，也可以选择一台设备单发。群发只发送给点击发送时，与本机直接配对且在线的设备。</span></p></details>
+        <details><summary><span data-i18n="page.does.changing.the.pairing.code.affect.existing.connections">连接码更新，还能继续传吗？</span></summary><p><span data-i18n="page.no.codes.create.new.pairings.updating.or.expiring">可以。连接码只用于发起新配对，更新或过期不会解除已有配对。配对关系长期保留，只有手动忘记才会解除。忘记设备前，双方的传输任务需先结束。</span></p></details>
+        <details><summary><span data-i18n="page.do.i.need.to.pair.again.after.reopening">重新打开浏览器，需要重新配对吗？</span></summary><p><span data-i18n="page.usually.not.if.you.use.the.same.browser">同一浏览器配置、同一网址且站点数据保留时，一般不需要。换浏览器、换配置或清除站点数据后，需要重新配对。</span></p></details>
+        <details><summary><span data-i18n="page.where.is.content.stored">内容会保存在哪里？</span></summary><p><span data-i18n="page.text.screenshots.and.files.travel.directly.between.devices">文字、截图和文件优先通过 P2P 在两台设备之间点对点直传。无法直连时（例如打洞失败），才通过服务器中转；中转服务器只负责转发，不保存或留存任何文件内容。</span></p><p><span data-i18n="page.received.content.stays.in.the.current.recipient.page">收到的内容暂存在接收端当前页面中。刷新或关闭页面前，请保存需要的文件、复制需要的文字。</span></p><p><span data-i18n="page.the.server.stores.device.information.and.pairings.so">为记住已配对设备，服务端会保存设备信息和配对关系，但不保存传输内容。</span></p></details>
+        <details><summary><span data-i18n="page.can.i.transfer.across.different.wi.fi.networks">不在同一个 Wi-Fi 下，也能传吗？</span></summary><p><span data-i18n="page.yes.when.the.deployment.provides.the.necessary.connectivity">可以。随传优先尝试 P2P 点对点直传，打洞失败、无法直连时使用服务器中转，中转不留存文件。双方需要联网，并保持随传的传输页打开。</span></p></details>
+        <details><summary><span data-i18n="page.is.there.a.file.size.limit">文件大小有限制吗？</span></summary><p><span data-i18n="page.up.to.8.files.at.a.time.direct">一次最多 8 个文件。P2P 直连不限文件大小；中转上限由服务管理员配置。请保持双方页面打开。</span></p></details>
       </div>
     </section>
   </main>
-  <footer class="site-footer"><span>随传 · xcopy.werfamily.fun</span><a href="https://xcopy.werfamily.fun/downloads/xcopy/">Linux / 树莓派命令行</a><span>简单 · 极速 · 安全快传</span></footer>
+  <footer class="site-footer"><span><span data-i18n="page.xcopy.alt.alt">随传 · XCopy</span></span><a data-cli-download hidden href="/downloads/xcopy/"><span data-i18n="page.linux.raspberry.pi.cli">Linux / 树莓派命令行</span></a><span><span data-i18n="page.simple.fast.secure.transfers">简单 · 极速 · 安全快传</span></span></footer>
 </div>
-<template id="content-text">会议改到下午三点，<br>记得带上修改后的方案。</template>
-<template id="content-image"><div class="file-item"><span class="file-icon"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg></span><div><strong>刚刚的截图.png</strong><small>图片 · 428 KB</small></div></div></template>
-<template id="content-file"><div class="file-item"><span class="file-icon"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg></span><div><strong>首页修改说明.pdf</strong><small>PDF 文档 · 1.2 MB</small></div></div></template>
+<template id="content-text"><span data-i18n="page.the.meeting.moved.to.3.pm">会议改到下午三点，</span><br><span data-i18n="page.remember.to.bring.the.updated.proposal">记得带上修改后的方案。</span></template>
+<template id="content-image"><div class="file-item"><span class="file-icon"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg></span><div><strong><span data-i18n="page.screenshot.png">刚刚的截图.png</span></strong><small><span data-i18n="page.image.428.kb">图片 · 428 KB</span></small></div></div></template>
+<template id="content-file"><div class="file-item"><span class="file-icon"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg></span><div><strong><span data-i18n="page.homepage.changes.pdf">首页修改说明.pdf</span></strong><small><span data-i18n="page.pdf.document.1.2.mb">PDF 文档 · 1.2 MB</span></small></div></div></template>
 </body>
 </html>

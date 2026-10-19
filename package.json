@@ -7,13 +7,16 @@
     "node": ">=24.0.0"
   },
   "scripts": {
-    "dev": "node --env-file-if-exists=.env --watch server/index.js",
+    "dev": "node --env-file-if-exists=.env scripts/dev.js",
     "start": "node --env-file-if-exists=.env server/index.js",
-    "test": "node --test test/server.test.js test/transfer.test.js test/archive.test.js test/device-name.test.js",
-    "test:e2e": "playwright test",
-    "test:relay": "node scripts/test-relay.js",
-    "test:cli": "node scripts/smoke-cli.js",
-    "check": "node scripts/check.js"
+    "test": "npm run build && node --test test/*.test.js",
+    "test:e2e": "npm run build && playwright test",
+    "test:relay": "npm run build && node scripts/test-relay.js",
+    "test:cli": "npm run build && node scripts/smoke-cli.js",
+    "check": "npm run typecheck && npm run check:i18n && node scripts/check.js",
+    "build": "node scripts/build-frontend.js",
+    "typecheck": "tsc -p tsconfig.frontend.json --noEmit && tsc -p tsconfig.type-tests.json --noEmit",
+    "check:i18n": "node scripts/check-i18n.js"
   },
   "dependencies": {
     "ws": "8.22.0"
@@ -21,6 +24,7 @@
   "devDependencies": {
     "@playwright/test": "1.64.1",
     "jsqr": "1.4.0",
-    "pngjs": "7.0.0"
+    "pngjs": "7.0.0",
+    "typescript": "7.0.2"
   }
 }
