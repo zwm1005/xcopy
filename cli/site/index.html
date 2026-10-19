@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="随传 XCopy 命令行客户端：让 Linux 服务器、Debian 和树莓派与电脑浏览器双向传输文件和文字。提供 amd64、arm64 下载、安装和配对教程，支持后台常驻接收。">
+  <title>随传 XCopy 命令行 - Linux、树莓派文件传输与安装教程</title>
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://xcopy.werfamily.fun/downloads/xcopy/">
+  <link rel="icon" href="/icon.svg?v=20261018-brand" type="image/svg+xml">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="随传 XCopy">
+  <meta property="og:locale" content="zh_CN">
+  <meta property="og:url" content="https://xcopy.werfamily.fun/downloads/xcopy/">
+  <meta property="og:title" content="随传 XCopy 命令行 - Linux、树莓派文件传输">
+  <meta property="og:description" content="让 Linux 和树莓派与浏览器双向传输文件和文字。提供 amd64、arm64 下载及安装、配对和后台接收教程。">
+  <style>
+    :root { color-scheme: light dark; --bg:#fafaf9; --ink:#20221f; --muted:#666b63; --line:#dce0d7; --panel:#fff; --green:#287144 }
+    * { box-sizing:border-box }
+    body { margin:0; font:16px/1.75 system-ui,-apple-system,"PingFang SC",sans-serif; background:var(--bg); color:var(--ink) }
+    main { max-width:880px; margin:auto; padding:40px 24px 64px }
+    nav { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--line); padding-bottom:24px; gap:16px }
+    a { color:inherit; text-underline-offset:5px }
+    .brand { text-decoration:none; font-size:20px; font-weight:750 }
+    .eyebrow { margin:64px 0 12px; font:13px ui-monospace,monospace; color:var(--green) }
+    h1 { font-size:clamp(32px,6vw,52px); line-height:1.2; letter-spacing:-.04em; margin:0 0 24px }
+    .intro { max-width:620px; font-size:18px; color:var(--muted) }
+    .downloads { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:32px 0 12px }
+    .download { display:block; padding:22px; text-decoration:none; border:1px solid var(--line); border-radius:12px; background:var(--panel) }
+    .download:hover { border-color:var(--green) }
+    .download strong { display:block; font-size:20px }
+    .download span, .small { font-size:14px; color:var(--muted) }
+    h2 { font-size:22px; margin:48px 0 16px }
+    h3 { font-size:17px; margin:24px 0 8px }
+    pre { white-space:pre; overflow:auto; padding:20px; background:var(--panel); border:1px solid var(--line); border-radius:10px; font:13px/1.9 ui-monospace,SFMono-Regular,Consolas,monospace }
+    code { font-family:ui-monospace,SFMono-Regular,Consolas,monospace }
+    footer { border-top:1px solid var(--line); margin-top:48px; padding-top:24px; color:var(--muted); font-size:14px }
+    @media(max-width:560px) { main { padding:24px 20px 40px } .downloads { grid-template-columns:1fr } .eyebrow { margin-top:44px } }
+    @media(prefers-color-scheme:dark) { :root { --bg:#151714; --ink:#e7eae3; --muted:#a2a99d; --line:#353b31; --panel:#1d211a; --green:#77c88d } }
+  </style>
+</head>
+<body><main>
+  <nav><a class="brand" href="/">随传 / xcopy</a><a href="/transfer">打开浏览器传输页 ↗</a></nav>
+  <p class="eyebrow">XCOPY CLI · v0.1.2</p>
+  <h1>没有桌面，也能随手传。</h1>
+  <p class="intro">让 Linux 服务器、Debian 和树莓派与浏览器互传文字、文件。配对一次，后台常驻，收到的内容直接保存到你的目录。</p>
+  <div class="downloads">
+    <a class="download" href="v0.1.2/xcopy_0.1.2_linux_amd64.tar.gz"><strong>Linux amd64 ↓</strong><span>Intel / AMD · x86_64</span></a>
+    <a class="download" href="v0.1.2/xcopy_0.1.2_linux_arm64.tar.gz"><strong>Linux arm64 ↓</strong><span>树莓派 64 位系统 · aarch64</span></a>
+  </div>
+  <p class="small">运行 <code>uname -m</code> 查看架构。暂不支持 32 位 ARM 系统。 <a href="v0.1.2/SHA256SUMS">SHA-256 校验文件</a> · <a href="v0.1.2/README.md">完整中文说明</a></p>
+  <h2>1. 安装客户端</h2>
+  <p>以下以树莓派 arm64 为例；x86_64 主机把命令中的 <code>arm64</code> 换为 <code>amd64</code>。</p>
+  <pre><code>curl -fLO https://xcopy.werfamily.fun/downloads/xcopy/v0.1.2/xcopy_0.1.2_linux_arm64.tar.gz
+curl -fLO https://xcopy.werfamily.fun/downloads/xcopy/v0.1.2/SHA256SUMS
+sha256sum --ignore-missing -c SHA256SUMS
+tar -xzf xcopy_0.1.2_linux_arm64.tar.gz
+cd xcopy_0.1.2_linux_arm64
+sh install.sh
+export PATH="$HOME/.local/bin:$PATH"</code></pre>
+  <h2>2. 配置后台与接收目录</h2>
+  <pre><code>xcopy init --name raspberry-pi --receive-dir "$HOME/xcopy/inbox"
+xcopy service install --user --start
+sudo loginctl enable-linger "$USER"
+xcopy status</code></pre>
+  <p class="small">普通用户运行安装和初始化。<code>enable-linger</code> 用于退出 SSH 后保持在线及开机启动。没有 systemd 时可直接运行 <code>xcopy serve</code>。</p>
+  <h2>3. 和浏览器连接</h2>
+  <p>打开浏览器传输页，点击「连接设备」，将页面上的 8 位连接码输入终端，再回到浏览器确认。</p>
+  <pre><code>xcopy pair join 12345678
+xcopy devices</code></pre>
+  <h2>4. 双向传输</h2>
+  <pre><code>xcopy send ./app.log --to 我的电脑
+printf '树莓派运行正常\n' | xcopy send --stdin --to 我的电脑
+xcopy inbox
+xcopy transfers --follow
+xcopy read 记录ID</code></pre>
+  <p>浏览器选择你的 Linux 设备即可发回文件。发送命令默认等待接收方确认；同名文件会另取名称，收到的内容不会自动执行。</p>
+  <footer>文件上限 50 MiB，文字上限 1 MiB。双方需在线并已配对。支持加密直传及 TURN 中继；中断后请重新发送，当前版本不支持离线投递和断点续传。</footer>
+</main></body>
+</html>

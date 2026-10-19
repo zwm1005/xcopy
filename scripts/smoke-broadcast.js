@@ -6,12 +6,12 @@ async function device(browser, baseURL, name) {
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto(new URL('/transfer', baseURL).href);
-  await expect(page.locator('[data-connection]')).toHaveText('已连接');
+  await expect(page.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready');
   await page.locator('[data-action="devices"]').click();
   await page.locator('[data-name-input]').fill(name);
   await page.locator('[data-action="rename"]').click();
   await expect(page.locator('[data-local-name]')).toHaveText(name);
-  await page.locator('[data-action="close"]').click();
+  await expect(page.locator('.qt-overlay')).toBeHidden();
   return { context, page };
 }
 

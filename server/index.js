@@ -6,6 +6,8 @@ import { resolve, extname } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { Store } from './store.js';
 import { loadConfig } from './config.js';
+import { createShares } from './shares.js';
+import { validDeviceName } from '../public/device-name.js';
 
 const publicDir = fileURLToPath(new URL('../public/', import.meta.url));
 const randomId = () => randomBytes(32).toString('base64url');
@@ -26,8 +28,9 @@ function requireThat(ok, code, message) {
 }
 
 function cleanName(value) {
-  requireThat(typeof value === 'string' && value.trim().length > 0 && value.length <= 24, 'INVALID_NAME', '设备名称应为 1–24 个字符');
-  return value.trim();
+  const name = validDeviceName(value);
+  requireThat(name, 'INVALID_NAME', '设备名称应为 1–24 个字符');
+  return name;
 }
 
 export function createApp(overrides = {}) {
@@ -40,6 +43,7 @@ export function createApp(overrides = {}) {
   const transfers = new Map();
   const limits = new Map();
   const now = overrides.now || Date.now;
+  const shares = createShares({ config, now, requireThat, rate, send, transfers, finish, iceServers, cleanName, deviceName: (id) => store.device(id).name });
 
   function rate(key, limit, windowMs = 60000, cooldown = windowMs) {
     const time = now();
@@ -66,6 +70,11 @@ export function createApp(overrides = {}) {
     return [...sockets].filter((ws) => ws.deviceId === id && ws.readyState === WebSocket.OPEN);
   }
 
+  function reception(ws) {
+    const pages = deviceSockets(ws.deviceId);
+    return { here: pages[0] === ws, pages: pages.length };
+  }
+
   function emitDevice(id, type, data) {
     for (const ws of deviceSockets(id)) {
       send(ws, type, data);
@@ -87,14 +96,14 @@ export function createApp(overrides = {}) {
   function publish() {
     for (const ws of sockets) {
       if (ws.deviceId) {
-        send(ws, 'peers', { peers: peers(ws.deviceId), name: store.device(ws.deviceId).name });
+        send(ws, 'peers', { peers: peers(ws.deviceId), name: store.device(ws.deviceId).name, reception: reception(ws) });
       }
     }
   }
 
-  function iceServers(id) {
+  function iceServers(id, allowRelay = true) {
     const result = config.stunUrls.length ? [{ urls: config.stunUrls }] : [];
-    if (config.turnUrls.length) {
+    if (allowRelay && config.turnUrls.length) {
       const username = `${Math.floor(now() / 1000) + 3600}:${id.slice(0, 16)}`;
       const credential = createHmac('sha1', config.turnSecret).update(username).digest('base64');
       result.push({ urls: config.turnUrls, username, credential });
@@ -107,9 +116,13 @@ export function createApp(overrides = {}) {
       return;
     }
     t.status = status;
+    t.reason = reason;
     t.updated = now();
     send(t.sender, 'transfer.state', { id: t.id, status, reason });
     send(t.receiver, 'transfer.state', { id: t.id, status, reason });
+    if (t.shareId) {
+      shares.finished(t);
+    }
     publish();
   }
 
@@ -139,15 +152,18 @@ export function createApp(overrides = {}) {
     const t = transfers.get(id);
     requireThat(t && (t.sender === ws || t.receiver === ws), 'NOT_FOUND', '传输不存在或不属于当前页面');
     requireThat(!terminal.has(t.status), 'TRANSFER_ENDED', '传输已结束');
-    requireThat(validPair(t.from, t.to), 'NOT_PAIRED', '配对已失效，请重新连接');
+    requireThat(t.shareId ? shares.authorized(t) : validPair(t.from, t.to), 'NOT_PAIRED', '传输授权已失效');
     return t;
   }
 
   function handle(ws, type, data = {}) {
     requireThat(data && typeof data === 'object' && !Array.isArray(data), 'INVALID', '请求格式错误');
+    if (type === 'guest.open' || type.startsWith('share.')) {
+      return shares.handle(ws, type, data);
+    }
     if (type === 'auth.begin') {
-      requireThat(!ws.deviceId, 'INVALID', '已经验证身份');
-      rate(`auth:${ws.source}`, 30);
+      requireThat(!ws.deviceId && !ws.guestId, 'INVALID', '已经验证身份');
+      rate(`auth:${ws.source}`, config.authLimit ?? 30);
       rate('auth:global', 300);
       requireThat(typeof data.publicKey === 'string' && data.publicKey.length < 256, 'INVALID_KEY', '设备公钥无效');
       let key;
@@ -186,6 +202,7 @@ export function createApp(overrides = {}) {
           }
         }
         sessions.delete(old.sessionId);
+        shares.resume(old, ws);
         resumed = true;
       }
       for (const peer of store.peers(device.id)) {
@@ -194,10 +211,10 @@ export function createApp(overrides = {}) {
         }
       }
       publish();
-      return { device: { id: device.id, name: device.name }, sessionId: ws.sessionId, resumed, peers: peers(device.id), config: { maxFileBytes: config.maxFileBytes, maxTextBytes: config.maxTextBytes, forceRelay: config.forceRelay, hasTurn: config.turnUrls.length > 0 }, tasks: [...transfers.values()].filter((t) => t.sender === ws || t.receiver === ws).map((t) => ({ id: t.id, status: t.status })) };
+      return { device: { id: device.id, name: device.name }, sessionId: ws.sessionId, resumed, peers: peers(device.id), reception: reception(ws), config: { maxFileBytes: config.maxFileBytes, maxRelayFileBytes: config.maxFileBytes, maxTextBytes: config.maxTextBytes, forceRelay: config.forceRelay, hasTurn: config.turnUrls.length > 0 }, tasks: [...transfers.values()].filter((t) => t.sender === ws || t.receiver === ws).map((t) => ({ id: t.id, status: t.status })) };
     }
 
-    requireThat(ws.deviceId, 'UNAUTHORIZED', '请先验证设备身份');
+    requireThat(ws.deviceId || (ws.guestId && ['transfer.accept', 'signal', 'transfer.progress', 'transfer.end'].includes(type)), 'UNAUTHORIZED', '请先验证设备身份');
     switch (type) {
       case 'peers.list':
         return { peers: peers(ws.deviceId) };
@@ -272,33 +289,43 @@ export function createApp(overrides = {}) {
         const active = [...transfers.values()].filter((t) => !terminal.has(t.status));
         requireThat(active.filter((t) => t.from === ws.deviceId || t.to === ws.deviceId).length < config.maxActive && active.filter((t) => t.from === data.peerId || t.to === data.peerId).length < config.maxActive, 'BUSY', '传输任务较多，请稍后再试');
         const m = data.metadata;
-        requireThat(m && ['text', 'file', 'image'].includes(m.kind) && Number.isSafeInteger(m.size) && m.size >= 0 && m.size <= (m.kind === 'text' ? config.maxTextBytes : config.maxFileBytes), 'SIZE_LIMIT', '内容超出大小限制');
+        requireThat(m && ['text', 'file', 'image'].includes(m.kind) && Number.isSafeInteger(m.size) && m.size >= 0 && (m.kind !== 'text' || m.size <= config.maxTextBytes), 'SIZE_LIMIT', '内容大小无效或文字超出限制');
         requireThat(typeof m.name === 'string' && m.name.length <= 255 && typeof m.mime === 'string' && m.mime.length <= 100, 'INVALID', '文件信息无效');
         const id = randomId();
-        const t = { id, from: ws.deviceId, to: data.peerId, sender: ws, receiver, status: 'waiting', created: now(), updated: now() };
+        const policy = { directOnly: m.size > config.maxFileBytes, maxRelayFileBytes: config.maxFileBytes, forceRelay: config.forceRelay };
+        const t = { id, ...policy, from: ws.deviceId, to: data.peerId, sender: ws, receiver, status: 'waiting', created: now(), updated: now() };
         transfers.set(id, t);
-        send(receiver, 'transfer.offer', { id, peerId: t.from, peerName: store.device(t.from).name, metadata: { kind: m.kind, size: m.size, name: m.name, mime: m.mime }, iceServers: iceServers(t.to), forceRelay: config.forceRelay });
+        send(receiver, 'transfer.offer', { id, ...policy, peerId: t.from, peerName: store.device(t.from).name, metadata: { kind: m.kind, size: m.size, name: m.name, mime: m.mime }, iceServers: iceServers(t.to, !policy.directOnly) });
         publish();
-        return { id, iceServers: iceServers(t.from), forceRelay: config.forceRelay };
+        return { id, ...policy, iceServers: iceServers(t.from, !policy.directOnly) };
       }
       case 'transfer.accept': {
         const t = task(ws, data.id);
         requireThat(t.receiver === ws && t.status === 'waiting', 'FORBIDDEN', '不能接受此传输');
         t.status = 'transferring';
         t.updated = now();
-        store.pair(t.from, t.to, now());
+        if (!t.shareId) {
+          store.pair(t.from, t.to, now());
+        }
         send(t.sender, 'transfer.accepted', { id: t.id });
         return {};
       }
       case 'signal': {
         const t = task(ws, data.id);
         requireThat(t.status === 'transferring', 'INVALID', '接收端尚未准备好');
-        const s = data.signal;
+        let s = data.signal;
         requireThat(s && typeof s === 'object' && JSON.stringify(s).length < 50000, 'INVALID', '协商信息无效');
         if (s.description) {
           requireThat(s.description.type === (t.sender === ws ? 'offer' : 'answer') && typeof s.description.sdp === 'string', 'INVALID', '协商信息无效');
         } else {
           requireThat(s.candidate && typeof s.candidate.candidate === 'string' && s.candidate.candidate.length < 4096, 'INVALID', '协商信息无效');
+        }
+        if (t.directOnly) {
+          if (s.description) {
+            s = { ...s, description: { ...s.description, sdp: s.description.sdp.split(/\r?\n/).filter((line) => !/^a=candidate:.*\btyp relay\b/.test(line)).join('\r\n') } };
+          } else if (/\btyp relay\b/.test(s.candidate.candidate)) {
+            return {};
+          }
         }
         send(t.sender === ws ? t.receiver : t.sender, 'signal', { id: t.id, signal: s });
         t.updated = now();
@@ -314,9 +341,12 @@ export function createApp(overrides = {}) {
         requireThat(['completed', 'failed', 'cancelled'].includes(data.status), 'INVALID', '传输状态无效');
         if (data.status === 'completed') {
           requireThat(t.receiver === ws && t.status === 'transferring', 'FORBIDDEN', '仅接收端可确认送达');
-          store.pair(t.from, t.to, now());
+          if (!t.shareId) {
+            store.pair(t.from, t.to, now());
+          }
         }
-        finish(t, data.status, data.status === 'failed' ? '传输失败，请重试' : '');
+        const reason = t.directOnly && data.reasonCode === 'RELAY_SIZE_LIMIT' ? `无法建立 P2P 直连，服务器中转单个文件不能超过 ${config.maxFileBytes / 1048576} MB；请更换网络后重试` : '传输失败，请重试';
+        finish(t, data.status, data.status === 'failed' ? reason : '');
         return {};
       }
       default:
@@ -353,8 +383,8 @@ export function createApp(overrides = {}) {
       return;
     }
     // Explicit allowlist: never expose the SQLite database, env file or source tree.
-    const files = new Set(['/index.html', '/transfer.html', '/home.js', '/home.css', '/app.js', '/identity.js', '/connection.js', '/transfer.js', '/styles.css', '/icon.svg']);
-    const pages = { '/': '/index.html', '/transfer': '/transfer.html', '/transfer/': '/transfer.html' };
+    const files = new Set(['/index.html', '/transfer.html', '/home.js', '/home.css', '/app.js', '/identity.js', '/connection.js', '/device-name.js', '/transfer.js', '/styles.css', '/icon.svg', '/share.html', '/share.js', '/share.css', '/share-ui.js', '/qrcode.js', '/archive.js', '/vendor/noble-hashes/sha2.js', '/vendor/noble-hashes/_md.js', '/vendor/noble-hashes/_u64.js', '/vendor/noble-hashes/utils.js']);
+    const pages = { '/': '/index.html', '/transfer': '/transfer.html', '/transfer/': '/transfer.html', '/s': '/share.html', '/s/': '/share.html' };
     const file = Object.hasOwn(pages, path) ? pages[path] : path;
     if (!files.has(file)) {
       res.writeHead(404).end('Not found');
@@ -372,7 +402,7 @@ export function createApp(overrides = {}) {
     try {
       requireThat(req.headers.origin === config.origin && req.url === '/ws', 'FORBIDDEN', 'Origin rejected');
       const source = config.trustProxy ? String(req.headers['x-forwarded-for'] || req.socket.remoteAddress).split(',')[0].trim() : req.socket.remoteAddress;
-      rate(`connect:${source}`, 60);
+      rate(`connect:${source}`, config.connectLimit ?? 60);
       requireThat(sockets.size < 1000, 'BUSY', 'Too many connections');
       wss.handleUpgrade(req, socket, head, (ws) => {
         ws.source = source;
@@ -407,6 +437,7 @@ export function createApp(overrides = {}) {
     ws.on('close', () => {
       sockets.delete(ws);
       ws.closedAt = now();
+      shares.disconnected(ws);
       for (const [id, r] of requests) {
         if (r.requester === ws || (r.owner === ws.deviceId && !deviceSockets(ws.deviceId).length)) {
           endRequest(id, 'cancelled');
@@ -424,6 +455,7 @@ export function createApp(overrides = {}) {
   });
 
   function sweep() {
+    shares.sweep();
     for (const [code, c] of codes) {
       if (c.expires <= now()) {
         invalidateCode(code);
@@ -437,7 +469,7 @@ export function createApp(overrides = {}) {
         continue;
       }
       const disconnected = [t.sender, t.receiver].some((ws) => ws.readyState !== WebSocket.OPEN && now() - ws.closedAt > config.reconnectGrace);
-      if (disconnected || now() - t.updated > config.idleTimeout || !validPair(t.from, t.to)) {
+      if (disconnected || now() - t.updated > config.idleTimeout || !(t.shareId ? shares.authorized(t) : validPair(t.from, t.to))) {
         finish(t, 'failed', '连接中断或超时，请重新发送');
       }
     }
@@ -452,7 +484,7 @@ export function createApp(overrides = {}) {
       }
     }
     for (const ws of sockets) {
-      if (!ws.deviceId && now() - ws.openedAt > config.challengeTtl) {
+      if (!ws.deviceId && !ws.guestId && now() - ws.openedAt > config.challengeTtl) {
         ws.close(1008, 'Authentication timeout');
       }
     }

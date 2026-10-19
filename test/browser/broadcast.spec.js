@@ -5,12 +5,12 @@ async function device(browser, baseURL, name) {
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto(new URL('/transfer', baseURL).href);
-  await expect(page.locator('[data-connection]')).toHaveText('已连接');
+  await expect(page.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready');
   await page.locator('[data-action="devices"]').click();
   await page.locator('[data-name-input]').fill(name);
   await page.locator('[data-action="rename"]').click();
   await expect(page.locator('[data-local-name]')).toHaveText(name);
-  await page.locator('[data-action="close"]').click();
+  await expect(page.locator('.qt-overlay')).toBeHidden();
   return { context, page };
 }
 
@@ -54,7 +54,7 @@ test('群发固定配对名单，18 项有界传输，支持展开结果和切�
     await expect(b.locator('[data-target]')).not.toContainText('电脑 C');
     await expect(a.locator('[data-target]')).not.toContainText('电脑 D');
     await a.locator('[data-target]').selectOption('all-online');
-    await expect(a.locator('[data-action="send"]')).toHaveAttribute('aria-label', '群发给 2 台设备');
+    await expect(a.locator('[data-action="send"]')).toHaveAttribute('aria-label', '发送');
     await holdBytes(a);
     const files = Array.from({ length: 8 }, (_, index) => ({ name: `附件-${index}.bin`, mimeType: 'application/octet-stream', buffer: Buffer.alloc(32768, index + 1) }));
     // The attachment button still invokes the real file chooser.
@@ -100,7 +100,7 @@ test('群发固定配对名单，18 项有界传输，支持展开结果和切�
     await expect(d.locator('[data-transfer]')).toHaveCount(0);
     await a.locator('[data-target]').selectOption('all-online');
     await a.reload();
-    await expect(a.locator('[data-connection]')).toHaveText('已连接');
+    await expect(a.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready');
     await expect(a.locator('[data-target]')).not.toHaveValue('all-online');
     await expect(a.locator('[data-target] option:checked')).toHaveText('电脑 C');
   } finally {

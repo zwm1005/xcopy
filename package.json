@@ -3,15 +3,24 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24.0.0" },
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
     "dev": "node --env-file-if-exists=.env --watch server/index.js",
     "start": "node --env-file-if-exists=.env server/index.js",
-    "test": "node --test test/server.test.js test/transfer.test.js",
+    "test": "node --test test/server.test.js test/transfer.test.js test/archive.test.js test/device-name.test.js",
     "test:e2e": "playwright test",
     "test:relay": "node scripts/test-relay.js",
+    "test:cli": "node scripts/smoke-cli.js",
     "check": "node scripts/check.js"
   },
-  "dependencies": { "ws": "8.22.0" },
-  "devDependencies": { "@playwright/test": "1.64.1" }
+  "dependencies": {
+    "ws": "8.22.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "jsqr": "1.4.0",
+    "pngjs": "7.0.0"
+  }
 }

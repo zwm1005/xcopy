@@ -5,12 +5,12 @@ async function device(browser, baseURL, name) {
   const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
   const page = await context.newPage();
   await page.goto(new URL('/transfer', baseURL).href);
-  await expect(page.locator('[data-connection]')).toHaveText('已连接');
+  await expect(page.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready');
   await page.locator('[data-action="devices"]').click();
   await page.locator('[data-name-input]').fill(name);
   await page.locator('[data-action="rename"]').click();
   await expect(page.locator('[data-local-name]')).toHaveText(name);
-  await page.locator('[data-action="close"]').click();
+  await expect(page.locator('.qt-overlay')).toBeHidden();
   return { context, page };
 }
 
@@ -28,6 +28,35 @@ async function pair(a, b) {
   await expect(a.locator('.qt-overlay')).toBeHidden();
   await expect(b.locator('.qt-overlay')).toBeHidden();
 }
+
+test('离线设备提示只保留在附件按钮旁，中央不重复显示', async ({ browser, baseURL }, testInfo) => {
+  const a = await device(browser, baseURL, '提示检查发送端');
+  const b = await device(browser, baseURL, '提示检查接收端');
+  try {
+    await pair(a.page, b.page);
+    await a.page.locator('[data-target]').selectOption('all-online');
+    await b.context.close();
+    const target = a.page.locator('.qt-compose-tools [data-target]');
+    await expect(target).toHaveText('等待接收设备上线');
+    await expect(target).toBeDisabled();
+    await expect(a.page.locator('[data-send-note]')).toBeHidden();
+    await expect(a.page.locator('[data-send-note]')).toHaveText('');
+    await a.page.locator('[data-editor]').fill('离线时仍可编辑');
+    await expect(a.page.locator('[data-action="send"]')).toBeDisabled();
+    await expect(a.page.locator('[data-send-note]')).toBeHidden();
+    // Reload also checks the ordinary single-device selection.
+    await a.page.reload();
+    await expect(target).toHaveText('等待接收设备上线');
+    await expect(a.page.locator('[data-send-note]')).toBeHidden();
+    for (const width of [1440, 375]) {
+      await a.page.setViewportSize({ width, height: 900 });
+      expect(await a.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await a.page.screenshot({ path: testInfo.outputPath(`离线提示-${width}.png`), fullPage: true });
+    }
+  } finally {
+    await Promise.all([a.context.close(), b.context.close()]);
+  }
+});
 
 test('three-device pairing, real text/files/screenshots, refresh identity, revocation and mobile layout', async ({ browser, baseURL }) => {
   const a = await device(browser, baseURL, '办公电脑');
@@ -90,7 +119,7 @@ test('three-device pairing, real text/files/screenshots, refresh identity, revoc
     // The introduction page must not change a previously paired browser identity.
     await a.page.goto(baseURL);
     await a.page.getByRole('link', { name: '开始传输', exact: true }).click();
-    await expect(a.page.locator('[data-connection]')).toHaveText('已连接');
+    await expect(a.page.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready');
     await expect(a.page.locator('[data-local-name]')).toHaveText('办公电脑');
     await expect(a.page.locator('[data-transfer]')).toHaveCount(0);
     await expect(a.page.locator('[data-target] option')).toHaveCount(3);
@@ -103,8 +132,10 @@ test('three-device pairing, real text/files/screenshots, refresh identity, revoc
     await a.page.locator('.qt-device-row').filter({ hasText: '家里电脑' }).locator('[data-action="forget"]').click();
     await expect(a.page.locator('[data-devices-list]')).not.toContainText('家里电脑');
     await expect(a.page.locator('[data-devices-list]')).toContainText('笔记本');
+    // This scenario deliberately discards received screenshots when reloading.
+    b.page.once('dialog', (dialog) => dialog.accept());
     await b.page.reload();
-    await expect(b.page.locator('[data-connection]')).toHaveText('已连接');
+    await expect(b.page.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready');
     await b.page.locator('[data-action="devices"]').click();
     await expect(b.page.locator('[data-devices-list]')).toHaveText('还没有配对设备');
     await b.page.locator('[data-action="close"]').click();

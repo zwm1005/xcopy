@@ -112,6 +112,171 @@ async function pair(a, b) {
 const metadata = { name: 'hello.txt', size: 5, kind: 'file', mime: 'text/plain' };
 const rejected = (promise, code) => assert.rejects(promise, (error) => error.code === code);
 
+async function guest(connect, resumeSession) {
+  const client = await connect('访客', identity(), false);
+  client.authResult = await client.rpc('guest.open', { resumeSession });
+  return client;
+}
+
+test('share previews do not consume the link; concurrent claims have one winner and no device pairing', async (t) => {
+  const { connect, app } = await setup(t);
+  const sender = await connect('分享者');
+  const s = await sender.rpc('share.create', { files: [metadata, { ...metadata, name: '空文件', size: 0 }], minutes: 10 });
+  const [a, b] = await Promise.all([guest(connect), guest(connect)]);
+  const view = await a.rpc('share.inspect', { token: s.token });
+  assert.equal(view.status, 'ready');
+  assert.equal(view.token, undefined);
+  assert.equal((await b.rpc('share.inspect', { token: s.token })).status, 'ready');
+  await rejected(a.rpc('pair.code'), 'UNAUTHORIZED');
+  await rejected(a.rpc('transfer.start', { peerId: sender.id, metadata }), 'UNAUTHORIZED');
+  await rejected(a.rpc('share.list'), 'UNAUTHORIZED');
+  const claims = await Promise.allSettled([a.rpc('share.claim', { token: s.token, name: 'iOS-A3X8' }), b.rpc('share.claim', { token: s.token, name: 'Android-K7M2' })]);
+  assert.equal(claims.filter((r) => r.status === 'fulfilled').length, 1);
+  assert.equal(claims.find((r) => r.status === 'rejected').reason.code, 'SHARE_CLAIMED');
+  const winner = claims[0].status === 'fulfilled' ? a : b;
+  const loser = winner === a ? b : a;
+  const recipientName = winner === a ? 'iOS-A3X8' : 'Android-K7M2';
+  assert.equal(claims.find((r) => r.status === 'fulfilled').value.recipientName, recipientName);
+  assert.equal((await sender.rpc('share.list')).shares[0].recipientName, recipientName);
+  assert.equal((await loser.rpc('share.inspect', { token: s.token })).recipientName, undefined);
+  const hidden = await loser.event('share.state', (state) => state.status === 'claimed');
+  assert.equal(hidden.recipientName, undefined);
+  const tasks = [];
+  for (const index of [0, 1]) {
+    const task = await sender.rpc('share.file.start', { id: s.id, index });
+    tasks.push(task);
+    await rejected(loser.rpc('transfer.accept', { id: task.id }), 'NOT_FOUND');
+    await winner.rpc('transfer.accept', { id: task.id });
+    await rejected(sender.rpc('transfer.end', { id: task.id, status: 'completed' }), 'FORBIDDEN');
+  }
+  await winner.rpc('transfer.end', { id: tasks[0].id, status: 'completed' });
+  assert.equal((await winner.rpc('share.inspect', { token: s.token })).status, 'claimed');
+  await winner.rpc('transfer.end', { id: tasks[1].id, status: 'completed' });
+  assert.equal((await winner.rpc('share.inspect', { token: s.token })).status, 'completed');
+  assert.equal((await sender.rpc('share.list')).shares[0].recipientName, recipientName);
+  assert.equal((await loser.rpc('share.inspect', { token: s.token })).recipientName, undefined);
+  await rejected(winner.rpc('share.claim', { token: s.token }), 'SHARE_CLOSED');
+  await rejected(loser.rpc('share.claim', { token: s.token }), 'SHARE_CLOSED');
+  assert.equal(app.store.peers(sender.id).length, 0);
+  assert.equal(app.store.db.prepare('SELECT count(*) AS n FROM devices').get().n, 1);
+});
+
+test('recipient names are validated before claiming, frozen on retries and retained on guest reconnect', async (t) => {
+  const { connect } = await setup(t);
+  const sender = await connect('分享者');
+  const s = await sender.rpc('share.create', { files: [metadata], minutes: 10 });
+  const a = await connect('访客', identity(), false);
+  for (const name of ['', ' ', 'a'.repeat(25), '设备\n换行', null]) {
+    await rejected(a.rpc('guest.open', { name }), 'INVALID_NAME');
+  }
+  const opened = await a.rpc('guest.open', { name: 'iOS-A3X8' });
+  assert.equal(opened.device.name, 'iOS-A3X8');
+  for (const name of ['', ' ', 'a'.repeat(25), '设备\n换行', null]) {
+    await rejected(a.rpc('share.claim', { token: s.token, name }), 'INVALID_NAME');
+    assert.equal((await a.rpc('share.inspect', { token: s.token })).status, 'ready');
+  }
+  const claimed = await a.rpc('share.claim', { token: s.token, name: '  文铭的 iPhone  ' });
+  assert.equal(claimed.recipientName, '文铭的 iPhone');
+  assert.equal((await a.rpc('share.claim', { token: s.token, name: '新的名字' })).recipientName, '文铭的 iPhone');
+  await a.close();
+  const resumed = await guest(connect, opened.sessionId);
+  assert.equal(resumed.authResult.device.name, '文铭的 iPhone');
+  assert.equal((await resumed.rpc('share.inspect', { token: s.token })).recipientName, '文铭的 iPhone');
+  await sender.rpc('share.cancel', { id: s.id });
+  assert.equal((await sender.rpc('share.list')).shares[0].recipientName, '文铭的 iPhone');
+});
+
+test('share creation retries recover the same link without reserving a second share', async (t) => {
+  const { connect } = await setup(t);
+  const sender = await connect('分享者');
+  const input = { requestId: 'request-123', files: [metadata], minutes: 10 };
+  const first = await sender.rpc('share.create', input);
+  const again = await sender.rpc('share.create', input);
+  assert.equal(again.token, first.token);
+  assert.equal((await sender.rpc('share.list')).shares.length, 1);
+});
+
+test('share cancellation, expiry and metadata limits are enforced on the server', async (t) => {
+  let time = Date.now();
+  const { connect, app } = await setup(t, { now: () => time });
+  const sender = await connect('分享者');
+  const outsider = await connect('其他设备');
+  const a = await guest(connect);
+  for (const files of [[], Array(9).fill(metadata), [{ ...metadata, size: -1 }], [{ ...metadata, size: 51 * 1048576 }], Array(5).fill({ ...metadata, size: 50 * 1048576 })]) {
+    await rejected(sender.rpc('share.create', { files, minutes: 10 }), 'SIZE_LIMIT');
+  }
+  await rejected(sender.rpc('share.create', { files: [metadata], minutes: 0 }), 'INVALID');
+  const s = await sender.rpc('share.create', { files: [metadata], minutes: 10 });
+  await rejected(outsider.rpc('share.cancel', { id: s.id }), 'NOT_FOUND');
+  await rejected(a.rpc('share.cancel', { id: s.id }), 'NOT_FOUND');
+  await rejected(sender.rpc('share.create', { files: [metadata], minutes: 10 }), 'BUSY');
+  time += 600001;
+  await rejected(a.rpc('share.claim', { token: s.token }), 'SHARE_CLOSED');
+  assert.equal((await a.rpc('share.inspect', { token: s.token })).status, 'expired');
+  const next = await sender.rpc('share.create', { files: [metadata], minutes: 30 });
+  await a.rpc('share.claim', { token: next.token });
+  const task = await sender.rpc('share.file.start', { id: next.id, index: 0 });
+  await a.rpc('transfer.accept', { id: task.id });
+  await sender.rpc('share.cancel', { id: next.id });
+  await rejected(a.rpc('transfer.end', { id: task.id, status: 'completed' }), 'TRANSFER_ENDED');
+  assert.equal((await a.rpc('share.inspect', { token: next.token })).status, 'cancelled');
+  app.sweep();
+});
+
+test('share retry retains completed files and the original claimant; guests resume without device credentials', async (t) => {
+  let time = Date.now();
+  const { connect, app } = await setup(t, { now: () => time });
+  const sender = await connect('分享者');
+  const s = await sender.rpc('share.create', { files: [metadata, metadata], minutes: 10 });
+  const a = await guest(connect);
+  await a.rpc('share.claim', { token: s.token });
+  const first = await sender.rpc('share.file.start', { id: s.id, index: 0 });
+  await a.rpc('transfer.accept', { id: first.id });
+  await a.rpc('transfer.end', { id: first.id, status: 'completed' });
+  const second = await sender.rpc('share.file.start', { id: s.id, index: 1 });
+  await a.rpc('transfer.accept', { id: second.id });
+  await a.rpc('transfer.end', { id: second.id, status: 'failed' });
+  time += 31000; app.sweep();
+  await rejected(sender.rpc('share.file.start', { id: s.id, index: 0 }), 'BUSY');
+  const stranger = await guest(connect);
+  await rejected(stranger.rpc('share.retry', { id: s.id }), 'NOT_FOUND');
+  await a.close();
+  const resumed = await guest(connect, a.authResult.sessionId);
+  assert.equal(resumed.authResult.resumed, true);
+  assert.equal((await resumed.rpc('share.inspect', { token: s.token })).mine, true);
+  await resumed.rpc('share.retry', { id: s.id });
+  const retry = await sender.rpc('share.file.start', { id: s.id, index: 1 });
+  await resumed.rpc('transfer.accept', { id: retry.id });
+  await resumed.rpc('transfer.end', { id: retry.id, status: 'completed' });
+  assert.equal((await resumed.rpc('share.inspect', { token: s.token })).status, 'completed');
+});
+
+test('sender resumption belongs to its page; closing either endpoint never releases the link', async (t) => {
+  let time = Date.now();
+  const { connect, app } = await setup(t, { now: () => time });
+  const sender = await connect('分享者');
+  const s = await sender.rpc('share.create', { files: [metadata], minutes: 10 });
+  const a = await guest(connect);
+  await sender.close();
+  assert.equal((await a.rpc('share.inspect', { token: s.token })).senderOnline, false);
+  const otherTab = await connect('同一设备其他标签页', sender.keys);
+  await rejected(otherTab.rpc('share.cancel', { id: s.id }), 'NOT_FOUND');
+  const resumed = await connect('分享者', sender.keys, true, sender.authResult.sessionId);
+  assert.equal((await a.rpc('share.inspect', { token: s.token })).senderOnline, true);
+  await a.rpc('share.claim', { token: s.token });
+  await a.close();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  time += 15001; app.sweep();
+  const b = await guest(connect);
+  assert.equal((await b.rpc('share.inspect', { token: s.token })).status, 'unavailable');
+  await rejected(b.rpc('share.claim', { token: s.token }), 'SHARE_CLOSED');
+  const next = await resumed.rpc('share.create', { files: [metadata], minutes: 10 });
+  await resumed.close();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  time += 15001; app.sweep();
+  assert.equal((await b.rpc('share.inspect', { token: next.token })).status, 'unavailable');
+});
+
 test('malformed HTTP request targets return 400 without stopping the service', async (t) => {
   const { address } = await setup(t);
   for (const path of ['//[/', 'http://[', '//example.com/']) {
@@ -143,6 +308,29 @@ test('proof of private key is required; challenges are single-use; unauthenticat
   const b = await connect('B', a.keys);
   assert.equal(a.id, b.id);
   assert.equal(b.authResult.device.name, 'A');
+});
+
+test('reception status identifies the actual receiving tab and follows its disconnection', async (t) => {
+  const { connect } = await setup(t);
+  const sender = await connect('发送端');
+  const first = await connect('接收端');
+  await pair(sender, first);
+  assert.deepEqual(first.authResult.reception, { here: true, pages: 1 });
+  const second = await connect('接收端', first.keys);
+  assert.deepEqual(second.authResult.reception, { here: false, pages: 2 });
+  const updated = await first.event('peers', (event) => event.reception.pages === 2);
+  assert.deepEqual(updated.reception, { here: true, pages: 2 });
+  const initial = await sender.rpc('transfer.start', { peerId: first.id, metadata });
+  await first.event('transfer.offer', (offer) => offer.id === initial.id);
+  await rejected(second.rpc('transfer.accept', { id: initial.id }), 'NOT_FOUND');
+  await sender.rpc('transfer.end', { id: initial.id, status: 'cancelled' });
+  await first.close();
+  const takeover = await second.event('peers', (event) => event.reception.here && event.reception.pages === 1);
+  assert.deepEqual(takeover.reception, { here: true, pages: 1 });
+  const next = await sender.rpc('transfer.start', { peerId: second.id, metadata });
+  await second.event('transfer.offer', (offer) => offer.id === next.id);
+  await second.rpc('transfer.accept', { id: next.id });
+  await sender.rpc('transfer.end', { id: next.id, status: 'cancelled' });
 });
 
 test('A–B and A–C never authorize B–C; approval binds the specific requester and consumes code', async (t) => {
@@ -282,4 +470,146 @@ test('a new server instance reads persisted relationships and names; limits and 
   await rejected(a2.rpc('transfer.start', { peerId: b2.id, metadata: { ...metadata, size: 51 * 1048576 } }), 'SIZE_LIMIT');
   const response = await fetch(`http://127.0.0.1:${second.address.port}/data/suichuan.sqlite`);
   assert.equal(response.status, 404);
+});
+
+async function multipleGuest(connect) {
+  const client = await connect('访客', identity(), false);
+  client.authResult = await client.rpc('guest.open', { shareProtocol: 2 });
+  return client;
+}
+const multipleInput = { files: [metadata], minutes: 10, mode: 'multiple', shareProtocol: 2 };
+async function completeClaim(sender, receiver, share, claimId, index = 0) {
+  const task = await sender.rpc('share.file.start', { id: share.id, claimId, index });
+  await receiver.rpc('transfer.accept', { id: task.id });
+  await receiver.rpc('transfer.end', { id: task.id, status: 'completed' });
+  return task;
+}
+
+test('multiple shares isolate four concurrent claims, release queued slots and permit more than ten completed claims', async (t) => {
+  const { connect } = await setup(t);
+  const sender = await connect('多人发送');
+  const s = await sender.rpc('share.create', multipleInput);
+  const visitors = await Promise.all(Array.from({ length: 4 }, () => multipleGuest(connect)));
+  const states = await Promise.all(visitors.map((c, i) => c.rpc('share.claim', { token: s.token, name: `接收 ${i}` })));
+  assert.equal(states.filter((r) => r.myClaim.state === 'transferring').length, 3);
+  assert.equal(states[3].myClaim.state, 'queued');
+  assert.equal(states[3].myClaim.position, 1);
+  assert.equal(states[0].claims, undefined);
+  assert.equal((await visitors[0].rpc('share.claim', { token: s.token })).myClaim.id, states[0].myClaim.id);
+  await rejected(visitors[1].rpc('share.retry', { id: s.id, claimId: states[0].myClaim.id }), 'NOT_FOUND');
+  await rejected(sender.rpc('share.file.start', { id: s.id, claimId: states[3].myClaim.id, index: 0 }), 'BUSY');
+  await completeClaim(sender, visitors[0], s, states[0].myClaim.id);
+  assert.equal((await visitors[3].rpc('share.inspect', { token: s.token })).myClaim.state, 'transferring');
+  assert.equal((await visitors[0].rpc('share.claim', { token: s.token })).myClaim.state, 'completed');
+  for (let i = 1; i < visitors.length; i += 1) {
+    await completeClaim(sender, visitors[i], s, states[i].myClaim.id);
+  }
+  for (let i = 4; i < 12; i += 1) {
+    const receiver = await multipleGuest(connect);
+    const claimed = await receiver.rpc('share.claim', { token: s.token });
+    await completeClaim(sender, receiver, s, claimed.myClaim.id);
+  }
+  const result = (await sender.rpc('share.list')).shares[0];
+  assert.equal(result.counts.completed, 12);
+  assert.equal(result.accepting, true);
+  assert.equal(result.status, 'ready');
+  const observer = await multipleGuest(connect);
+  const view = await observer.rpc('share.inspect', { token: s.token });
+  assert.equal(view.claims, undefined);
+  assert.equal(view.counts, undefined);
+  assert.equal(view.recipientName, undefined);
+  assert.equal(JSON.stringify(view).includes('接收 0'), false);
+});
+
+test('multiple expiry rejects new claims at the exact deadline while admitted and queued claims complete', async (t) => {
+  let time = Date.now();
+  const { connect } = await setup(t, { now: () => time, shareConcurrency: 1 });
+  const sender = await connect('多人发送');
+  const s = await sender.rpc('share.create', multipleInput);
+  const [a, b, late] = await Promise.all(Array.from({ length: 3 }, () => multipleGuest(connect)));
+  const ca = await a.rpc('share.claim', { token: s.token });
+  const cb = await b.rpc('share.claim', { token: s.token });
+  assert.equal(cb.myClaim.state, 'queued');
+  time = s.expires;
+  await rejected(late.rpc('share.claim', { token: s.token }), 'SHARE_CLOSED');
+  assert.equal((await a.rpc('share.inspect', { token: s.token })).status, 'draining');
+  await completeClaim(sender, a, s, ca.myClaim.id);
+  await completeClaim(sender, b, s, cb.myClaim.id);
+  const ended = (await sender.rpc('share.list')).shares[0];
+  assert.equal(ended.status, 'expired');
+  assert.equal(ended.counts.completed, 2);
+  assert.equal((await b.rpc('share.inspect', { token: s.token })).myClaim.state, 'completed');
+});
+
+test('multiple retry, disconnection and stop affect only intended claims; already completed files cannot resend', async (t) => {
+  let time = Date.now();
+  const { connect, app } = await setup(t, { now: () => time });
+  const sender = await connect('多人发送');
+  const s = await sender.rpc('share.create', { ...multipleInput, files: [metadata, metadata] });
+  const [a, b, c] = await Promise.all(Array.from({ length: 3 }, () => multipleGuest(connect)));
+  const [ca, cb, cc] = await Promise.all([a, b, c].map((r) => r.rpc('share.claim', { token: s.token })));
+  await completeClaim(sender, a, s, ca.myClaim.id);
+  const broken = await sender.rpc('share.file.start', { id: s.id, claimId: ca.myClaim.id, index: 1 });
+  const healthy = await sender.rpc('share.file.start', { id: s.id, claimId: cb.myClaim.id, index: 0 });
+  await a.rpc('transfer.accept', { id: broken.id });
+  await b.rpc('transfer.accept', { id: healthy.id });
+  await a.rpc('transfer.end', { id: broken.id, status: 'failed' });
+  await a.rpc('share.retry', { id: s.id, claimId: ca.myClaim.id });
+  await rejected(sender.rpc('share.file.start', { id: s.id, claimId: ca.myClaim.id, index: 0 }), 'BUSY');
+  await b.rpc('transfer.end', { id: healthy.id, status: 'completed' });
+  await c.close();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  time += 15001;
+  app.sweep();
+  assert.equal((await sender.rpc('share.list')).shares[0].claims.find((claim) => claim.id === cc.myClaim.id).state, 'unavailable');
+  await sender.rpc('share.stop', { id: s.id });
+  const extra = await multipleGuest(connect);
+  await rejected(extra.rpc('share.claim', { token: s.token }), 'SHARE_CLOSED');
+  await completeClaim(sender, a, s, ca.myClaim.id, 1);
+  await completeClaim(sender, b, s, cb.myClaim.id, 1);
+  const ended = (await sender.rpc('share.list')).shares[0];
+  assert.equal(ended.status, 'stopped');
+  assert.equal(ended.counts.completed, 2);
+  assert.equal(ended.counts.failed, 1);
+});
+
+test('multiple queue capacity, recipient cancellation, compatibility and forced ending are enforced', async (t) => {
+  const { connect } = await setup(t, { shareConcurrency: 1, shareQueueLimit: 1 });
+  const sender = await connect('多人发送');
+  await rejected(sender.rpc('share.create', { ...multipleInput, shareProtocol: undefined }), 'UPDATE_REQUIRED');
+  const s = await sender.rpc('share.create', multipleInput);
+  const old = await guest(connect);
+  await rejected(old.rpc('share.inspect', { token: s.token }), 'UPDATE_REQUIRED');
+  const [a, b, c] = await Promise.all(Array.from({ length: 3 }, () => multipleGuest(connect)));
+  const ca = await a.rpc('share.claim', { token: s.token });
+  const cb = await b.rpc('share.claim', { token: s.token });
+  await rejected(c.rpc('share.claim', { token: s.token }), 'BUSY');
+  await b.rpc('share.claim.cancel', { id: s.id, claimId: cb.myClaim.id });
+  const cc = await c.rpc('share.claim', { token: s.token });
+  assert.equal(cc.myClaim.state, 'queued');
+  const task = await sender.rpc('share.file.start', { id: s.id, claimId: ca.myClaim.id, index: 0 });
+  await a.rpc('transfer.accept', { id: task.id });
+  await sender.rpc('share.cancel', { id: s.id });
+  await rejected(a.rpc('transfer.end', { id: task.id, status: 'completed' }), 'TRANSFER_ENDED');
+  assert.equal((await c.rpc('share.inspect', { token: s.token })).myClaim.state, 'cancelled');
+});
+
+test('multiple history remains bounded and a pruned recipient retains an idempotent private receipt', async (t) => {
+  let time = Date.now();
+  const { connect } = await setup(t, { now: () => time, connectLimit: 1000 });
+  const sender = await connect('多人发送');
+  const s = await sender.rpc('share.create', { ...multipleInput, minutes: 60 });
+  let first;
+  for (let i = 0; i < 55; i += 1) {
+    time += 1500;
+    const receiver = await multipleGuest(connect);
+    const claim = await receiver.rpc('share.claim', { token: s.token });
+    await completeClaim(sender, receiver, s, claim.myClaim.id);
+    first ||= receiver;
+  }
+  const record = (await sender.rpc('share.list')).shares[0];
+  assert.equal(record.counts.completed, 55);
+  assert.equal(record.claims.length, 50);
+  assert.equal((await first.rpc('share.claim', { token: s.token })).myClaim.state, 'completed');
+  assert.equal((await sender.rpc('share.list')).shares[0].counts.completed, 55);
 });

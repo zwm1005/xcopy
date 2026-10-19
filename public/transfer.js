@@ -1,8 +1,11 @@
+import { sha256 } from './vendor/noble-hashes/sha2.js';
+
 const ended = new Set(['completed', 'failed', 'cancelled']);
 const chunkSize = 16384;
+const blockSize = 1024 * 1024;
 const safeImages = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const digest = async (bytes) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
+const hex = (bytes) => [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
 
 export class Transfers extends EventTarget {
   constructor(connection) {
@@ -15,18 +18,17 @@ export class Transfers extends EventTarget {
     this.running = new Set();
     this.byId = new Map();
     this.pendingEnds = new Map();
-    this.memoryLimit = 256 * 1024 * 1024;
     connection.addEventListener('transfer.offer', (e) => this.receive(e.detail));
     connection.addEventListener('transfer.accepted', (e) => {
       const item = this.byId.get(e.detail.id);
       if (item) {
-        this.beginOffer(item).catch((error) => this.fail(item, error.message));
+        this.beginOffer(item).catch((error) => this.fail(item, error.message, error.code));
       }
     });
     connection.addEventListener('signal', (e) => {
       const item = this.byId.get(e.detail.id);
       if (item && !ended.has(item.status)) {
-        item.signalQueue = (item.signalQueue || Promise.resolve()).then(() => this.signal(item, e.detail.signal)).catch((error) => this.fail(item, error.message));
+        item.signalQueue = (item.signalQueue || Promise.resolve()).then(() => this.signal(item, e.detail.signal)).catch((error) => this.fail(item, error.message, error.code));
       }
     });
     connection.addEventListener('transfer.state', (e) => {
@@ -53,9 +55,9 @@ export class Transfers extends EventTarget {
           this.finishLocal(item, remote.status);
         }
       }
-      for (const [id, status] of this.pendingEnds) {
+      for (const [id, result] of this.pendingEnds) {
         if (resumed && tasks.some((t) => t.id === id && !ended.has(t.status))) {
-          this.endRemote(id, status);
+          this.endRemote(id, result.status, result.reasonCode);
         } else {
           this.pendingEnds.delete(id);
         }
@@ -67,7 +69,8 @@ export class Transfers extends EventTarget {
       for (const item of this.items) {
         if (!ended.has(item.status) && item.status !== 'queued') {
           if (Date.now() - item.activity > 45000) {
-            this.fail(item, '连接或传输超时，请重新发送');
+            const blocked = item.directOnly && !item.route;
+            this.fail(item, blocked ? this.relayError(item).message : '连接或传输超时，请重新发送', blocked ? 'RELAY_SIZE_LIMIT' : undefined);
           } else if (item.id && item.bytes !== item.lastPulseBytes && connection.ready) {
             item.lastPulseBytes = item.bytes;
             connection.rpc('transfer.progress', { id: item.id }).catch(() => {});
@@ -120,10 +123,18 @@ export class Transfers extends EventTarget {
     return items;
   }
 
+  sendShare(share, files, claim) {
+    const items = files.flatMap((file, shareIndex) => claim?.files[shareIndex].completed ? [] : [this.queuedItem({ id: share.id, name: claim?.recipientName || '链接分享' }, { kind: 'file', file }, { shareId: share.id, claimId: claim?.id, shareIndex, shareOpen: true })]);
+    this.items.unshift(...items);
+    this.queue.push(...items);
+    this.changed(true);
+    return items;
+  }
+
   updatePeers(peers) {
     this.peers = peers;
     for (const item of this.queue) {
-      if (item.status === 'queued') {
+      if (item.status === 'queued' && !item.shareId) {
         const peer = peers.find((p) => p.id === item.peerId);
         if (!peer?.online) {
           this.fail(item, peer ? '接收设备已离线，上线后可重试' : '配对已解除，请重新连接后重试');
@@ -154,12 +165,18 @@ export class Transfers extends EventTarget {
       return;
     }
     while (this.running.size < 3 && this.queue.length) {
-      const item = this.queue.shift();
+      // 按接收会话轮转，普通设备传输也参与同一预算，避免大文件包独占队列。
+      const key = (item) => item.claimId || item.peerId;
+      const peers = [...new Set(this.queue.map(key))];
+      const next = peers[(peers.indexOf(this.lastQueuePeer) + 1) % peers.length];
+      const index = this.queue.findIndex((item) => key(item) === next);
+      const [item] = this.queue.splice(index, 1);
+      this.lastQueuePeer = key(item);
       if (item.status !== 'queued') {
         continue;
       }
       const peer = this.peers.find((p) => p.id === item.peerId);
-      if (!peer?.online) {
+      if (!item.shareId && !peer?.online) {
         this.fail(item, peer ? '接收设备已离线，上线后可重试' : '配对已解除，请重新连接后重试');
         continue;
       }
@@ -173,7 +190,7 @@ export class Transfers extends EventTarget {
 
   async start(item) {
     try {
-      const result = await this.connection.rpc('transfer.start', { peerId: item.peerId, metadata: { kind: item.kind, name: item.name, size: item.size, mime: item.mime } });
+      const result = await this.connection.rpc(item.shareId ? 'share.file.start' : 'transfer.start', item.shareId ? { id: item.shareId, claimId: item.claimId, index: item.shareIndex } : { peerId: item.peerId, metadata: { kind: item.kind, name: item.name, size: item.size, mime: item.mime } });
       Object.assign(item, result);
       if (ended.has(item.status)) {
         this.endRemote(item.id, item.status);
@@ -182,7 +199,7 @@ export class Transfers extends EventTarget {
       this.byId.set(item.id, item);
       this.createPeer(item);
     } catch (error) {
-      this.fail(item, error.message);
+      this.fail(item, error.message, error.code);
     } finally {
       item.starting = false;
       this.changed(true);
@@ -203,12 +220,12 @@ export class Transfers extends EventTarget {
     if (!item || item.incoming || !['failed', 'cancelled'].includes(item.status) || !this.connection.ready) {
       return;
     }
-    const peer = this.peers.find((p) => p.id === item.peerId && p.online);
+    const peer = item.shareId ? { id: item.shareId, name: item.peerName || '链接分享' } : this.peers.find((p) => p.id === item.peerId && p.online);
     const index = this.items.indexOf(item);
     if (!peer || index < 0) {
       return;
     }
-    const replacement = this.queuedItem(peer, item.source, { localId: item.localId, groupId: item.groupId, sourceIndex: item.sourceIndex });
+    const replacement = this.queuedItem(peer, item.source, { localId: item.localId, groupId: item.groupId, sourceIndex: item.sourceIndex, shareId: item.shareId, claimId: item.claimId, shareIndex: item.shareIndex, shareOpen: item.shareOpen });
     this.byId.delete(item.id);
     this.items[index] = replacement;
     this.queue.push(replacement);
@@ -224,33 +241,41 @@ export class Transfers extends EventTarget {
   }
 
   async receive(offer) {
-    const reserved = this.items.filter((t) => t.incoming && (t.blob || !ended.has(t.status))).reduce((sum, t) => sum + t.size, 0);
-    if (reserved + offer.metadata.size > Math.max(this.memoryLimit, this.connection.config.maxFileBytes)) {
-      this.endRemote(offer.id, 'failed');
-      this.dispatchEvent(new CustomEvent('notice', { detail: { message: '本页接收内容较多，请保存文件并清空已结束记录后重试' } }));
-      return;
-    }
-    const item = this.newItem({ ...offer.metadata, id: offer.id, peerId: offer.peerId, peerName: offer.peerName, incoming: true, iceServers: offer.iceServers, forceRelay: offer.forceRelay });
+    const item = this.newItem({ ...offer.metadata, id: offer.id, peerId: offer.peerId, peerName: offer.peerName, incoming: true, iceServers: offer.iceServers, forceRelay: offer.forceRelay, directOnly: offer.directOnly, maxRelayFileBytes: offer.maxRelayFileBytes, parts: [], chunkBytes: 0, hash: sha256.create() });
     this.byId.set(item.id, item);
     try {
       this.createPeer(item);
       await this.connection.rpc('transfer.accept', { id: item.id });
     } catch (error) {
-      this.fail(item, error.message);
+      this.fail(item, error.message, error.code);
     }
   }
 
+  relayError(item) {
+    const max = item.maxRelayFileBytes || this.connection.config?.maxRelayFileBytes || this.connection.config?.maxFileBytes || 50 * 1048576;
+    return Object.assign(new Error(`无法建立 P2P 直连，服务器中转单个文件不能超过 ${max / 1048576} MB；请更换网络后重试`), { code: 'RELAY_SIZE_LIMIT' });
+  }
+
   createPeer(item) {
-    const pc = new RTCPeerConnection({ iceServers: item.iceServers, iceTransportPolicy: item.forceRelay ? 'relay' : 'all' });
+    const max = item.maxRelayFileBytes || this.connection.config?.maxRelayFileBytes || this.connection.config?.maxFileBytes || 50 * 1048576;
+    item.directOnly = item.directOnly || item.size > max;
+    if (item.directOnly && item.forceRelay) {
+      throw this.relayError(item);
+    }
+    const iceServers = (item.iceServers || []).map((server) => ({ ...server, urls: [server.urls].flat().filter((url) => !item.directOnly || !/^turns?:/i.test(url)) })).filter((server) => server.urls.length);
+    const pc = new RTCPeerConnection({ iceServers, iceTransportPolicy: item.forceRelay ? 'relay' : 'all' });
     item.pc = pc;
     pc.onicecandidate = (event) => {
       if (event.candidate && !ended.has(item.status)) {
+        if (item.directOnly && /\btyp relay\b/.test(event.candidate.candidate)) {
+          return;
+        }
         this.connection.rpc('signal', { id: item.id, signal: { candidate: event.candidate.toJSON() } }).catch((error) => this.fail(item, error.message));
       }
     };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'failed') {
-        this.fail(item, '无法连接对方，请检查网络或 TURN 中继配置');
+        this.fail(item, item.directOnly ? this.relayError(item).message : '无法连接对方，请检查网络或 TURN 中继配置', item.directOnly ? 'RELAY_SIZE_LIMIT' : undefined);
       }
     };
     if (item.incoming) {
@@ -274,7 +299,8 @@ export class Transfers extends EventTarget {
       return;
     }
     if (signal.description) {
-      await item.pc.setRemoteDescription(signal.description);
+      const description = item.directOnly ? { ...signal.description, sdp: signal.description.sdp.split(/\r?\n/).filter((line) => !/^a=candidate:.*\btyp relay\b/.test(line)).join('\r\n') } : signal.description;
+      await item.pc.setRemoteDescription(description);
       for (const candidate of item.candidates.splice(0)) {
         await item.pc.addIceCandidate(candidate);
       }
@@ -284,6 +310,9 @@ export class Transfers extends EventTarget {
         await this.connection.rpc('signal', { id: item.id, signal: { description } });
       }
     } else if (signal.candidate) {
+      if (item.directOnly && /\btyp relay\b/.test(signal.candidate.candidate)) {
+        return;
+      }
       if (item.pc.remoteDescription) {
         await item.pc.addIceCandidate(signal.candidate);
       } else {
@@ -300,31 +329,23 @@ export class Transfers extends EventTarget {
     item.channel = channel;
     channel.binaryType = 'arraybuffer';
     channel.bufferedAmountLowThreshold = 256 * 1024;
-    channel.onopen = async () => {
+    channel.onopen = () => {
       if (ended.has(item.status)) {
         channel.close();
         return;
       }
-      item.activity = Date.now();
-      item.status = 'transferring';
-      try {
-        const stats = await item.pc.getStats();
-        for (const report of stats.values()) {
-          if (report.type === 'transport' && report.selectedCandidatePairId) {
-            const pair = stats.get(report.selectedCandidatePairId);
-            item.route = [stats.get(pair?.localCandidateId), stats.get(pair?.remoteCandidateId)].some((c) => c?.candidateType === 'relay') ? 'relay' : 'direct';
-          }
-        }
-        this.changed(true);
-        if (!item.incoming) {
+      item.opening = this.openChannel(item);
+      item.opening.then(async () => {
+        if (!item.incoming && !ended.has(item.status)) {
           await this.sendBytes(item);
         }
-      } catch (error) {
-        this.fail(item, error.message);
-      }
+      }).catch((error) => this.fail(item, error.message, error.code));
     };
     channel.onmessage = (event) => {
-      item.receiveQueue = (item.receiveQueue || Promise.resolve()).then(() => this.message(item, event.data)).catch((error) => this.fail(item, error.message));
+      item.receiveQueue = (item.receiveQueue || Promise.resolve()).then(async () => {
+        await item.opening;
+        await this.message(item, event.data);
+      }).catch((error) => this.fail(item, error.message, error.code));
     };
     channel.onerror = () => this.fail(item, '数据连接发生错误，请重试');
     channel.onclose = () => {
@@ -339,23 +360,72 @@ export class Transfers extends EventTarget {
     };
   }
 
-  async sendBytes(item) {
-    const buffer = await item.blob.arrayBuffer();
-    const hash = await digest(buffer);
-    for (let offset = 0; offset < buffer.byteLength; offset += chunkSize) {
-      while (item.channel.bufferedAmount > 512 * 1024 && !ended.has(item.status)) {
-        await pause(15);
-      }
+  async openChannel(item) {
+    item.activity = Date.now();
+    // 大文件仅允许直连，确认实际候选对后才发送文件内容。
+    for (let attempt = 0; attempt < (item.directOnly ? 20 : 1); attempt += 1) {
       if (ended.has(item.status)) {
         return;
       }
-      item.channel.send(buffer.slice(offset, offset + chunkSize));
-      item.bytes = Math.min(buffer.byteLength, offset + chunkSize);
-      item.activity = Date.now();
-      this.changed();
+      const selected = item.pc.sctp?.transport?.iceTransport?.getSelectedCandidatePair?.();
+      if (selected?.local?.type && selected?.remote?.type) {
+        item.route = [selected.local, selected.remote].some((c) => c.type === 'relay') ? 'relay' : 'direct';
+      } else {
+        const stats = await item.pc.getStats();
+        for (const report of stats.values()) {
+          const pair = report.type === 'transport' ? stats.get(report.selectedCandidatePairId) : report.type === 'candidate-pair' && (report.selected || report.nominated && report.state === 'succeeded') ? report : null;
+          if (pair) {
+            const candidates = [stats.get(pair.localCandidateId), stats.get(pair.remoteCandidateId)];
+            if (candidates.every((candidate) => candidate?.candidateType)) {
+              item.route = candidates.some((candidate) => candidate.candidateType === 'relay') ? 'relay' : 'direct';
+              break;
+            }
+          }
+        }
+      }
+      if (item.route || !item.directOnly) {
+        break;
+      }
+      await pause(100);
     }
-    if (!ended.has(item.status)) {
-      item.channel.send(JSON.stringify({ type: 'end', hash }));
+    if (ended.has(item.status)) {
+      return;
+    }
+    if (item.directOnly && item.route !== 'direct') {
+      throw this.relayError(item);
+    }
+    item.status = 'transferring';
+    this.changed(true);
+  }
+
+  async sendBytes(item) {
+    const hash = sha256.create();
+    try {
+      for (let start = 0; start < item.size; start += blockSize) {
+        if (ended.has(item.status)) {
+          return;
+        }
+        const buffer = new Uint8Array(await item.blob.slice(start, start + blockSize).arrayBuffer());
+        hash.update(buffer);
+        for (let offset = 0; offset < buffer.byteLength; offset += chunkSize) {
+          while (item.channel.bufferedAmount > 512 * 1024 && !ended.has(item.status)) {
+            await pause(15);
+          }
+          if (ended.has(item.status)) {
+            return;
+          }
+          const chunk = buffer.subarray(offset, offset + chunkSize);
+          item.channel.send(chunk);
+          item.bytes = start + offset + chunk.byteLength;
+          item.activity = Date.now();
+          this.changed();
+        }
+      }
+      if (!ended.has(item.status)) {
+        item.channel.send(JSON.stringify({ type: 'end', hash: hex(hash.digest()) }));
+      }
+    } finally {
+      hash.destroy();
     }
   }
 
@@ -368,7 +438,17 @@ export class Transfers extends EventTarget {
       if (!item.incoming || !(data instanceof ArrayBuffer) || data.byteLength > chunkSize || item.bytes + data.byteLength > item.size || item.receivingEnd) {
         throw new Error('收到的数据与传输声明不一致');
       }
+      if (item.directOnly && item.route !== 'direct') {
+        throw this.relayError(item);
+      }
+      item.hash.update(new Uint8Array(data));
       item.chunks.push(data);
+      item.chunkBytes += data.byteLength;
+      if (item.chunkBytes >= blockSize) {
+        item.parts.push(new Blob(item.chunks));
+        item.chunks = [];
+        item.chunkBytes = 0;
+      }
       item.bytes += data.byteLength;
       this.changed();
       return;
@@ -387,24 +467,25 @@ export class Transfers extends EventTarget {
       if (item.bytes !== item.size) {
         throw new Error('接收内容不完整，请重新发送');
       }
-      const blob = new Blob(item.chunks, { type: item.mime });
-      const bytes = await blob.arrayBuffer();
-      if (await digest(bytes) !== message.hash) {
+      const blob = new Blob([...item.parts, ...item.chunks], { type: item.mime });
+      if (hex(item.hash.digest()) !== message.hash) {
         throw new Error('内容校验失败，请重新发送');
       }
+      const text = item.kind === 'text' ? new TextDecoder('utf-8', { fatal: true }).decode(await blob.arrayBuffer()) : undefined;
       if (ended.has(item.status)) {
         return;
       }
       item.blob = blob;
       item.verified = true;
       if (item.kind === 'text') {
-        item.text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+        item.text = text;
       }
       if (safeImages.has(item.mime)) {
         item.url = URL.createObjectURL(blob);
       }
       item.status = 'completed';
       item.chunks = [];
+      item.parts = [];
       item.channel.send(JSON.stringify({ type: 'ack' }));
       this.endRemote(item.id, 'completed');
       this.changed(true);
@@ -414,12 +495,13 @@ export class Transfers extends EventTarget {
     }
   }
 
-  endRemote(id, status) {
+  endRemote(id, status, reasonCode) {
     if (!id) {
       return;
     }
-    this.pendingEnds.set(id, status);
-    this.connection.rpc('transfer.end', { id, status }).then(() => this.pendingEnds.delete(id)).catch((error) => {
+    const result = { status, ...(reasonCode ? { reasonCode } : {}) };
+    this.pendingEnds.set(id, result);
+    this.connection.rpc('transfer.end', { id, ...result }).then(() => this.pendingEnds.delete(id)).catch((error) => {
       if (['TRANSFER_ENDED', 'NOT_FOUND', 'NOT_PAIRED'].includes(error.code)) {
         this.pendingEnds.delete(id);
       }
@@ -429,6 +511,8 @@ export class Transfers extends EventTarget {
   closePeer(item) {
     item.pc?.close();
     item.chunks = [];
+    item.parts = [];
+    item.hash?.destroy();
   }
 
   finishLocal(item, status, reason = '') {
@@ -441,10 +525,10 @@ export class Transfers extends EventTarget {
     this.changed(true);
   }
 
-  fail(item, reason) {
+  fail(item, reason, reasonCode) {
     if (!ended.has(item.status)) {
       this.finishLocal(item, 'failed', reason || '传输失败，请重试');
-      this.endRemote(item.id, 'failed');
+      this.endRemote(item.id, 'failed', reasonCode);
     }
   }
 
@@ -461,7 +545,7 @@ export class Transfers extends EventTarget {
   clear() {
     const activeGroups = new Set(this.items.filter((item) => item.groupId && !ended.has(item.status)).map((item) => item.groupId));
     this.items = this.items.filter((item) => {
-      if (!ended.has(item.status) || activeGroups.has(item.groupId)) {
+      if (item.shareOpen || !ended.has(item.status) || activeGroups.has(item.groupId)) {
         return true;
       }
       if (item.url) {

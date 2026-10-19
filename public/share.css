@@ -1,0 +1,130 @@
+#suichuan .share-tabs { display:flex; gap:24px; border-bottom:1px solid var(--qt-border); margin-bottom:24px; }
+#suichuan .share-tabs button { border:0; border-bottom:2px solid transparent; padding:8px 0 12px; background:none; color:var(--qt-muted); cursor:pointer; }
+#suichuan .share-tabs button[aria-selected="true"] { border-color:var(--qt-text); color:var(--qt-text); }
+#suichuan .share-panel { border:1px solid var(--qt-border); border-radius:16px; padding:24px; background:var(--qt-bg); }
+#suichuan .share-panel h2 { font-size:19px; font-weight:500; }
+#suichuan .share-description { color:var(--qt-muted); margin:8px 0 22px; font-size:13px; overflow-wrap:anywhere; }
+#suichuan .share-muted { color:var(--qt-muted); }
+#suichuan .share-small { font-size:12px; }
+#suichuan .share-files { border-top:1px solid var(--qt-border); margin:20px 0; }
+#suichuan .share-file { display:flex; gap:12px; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--qt-border); min-width:0; }
+#suichuan .share-file-info { min-width:0; flex:1; }
+#suichuan .share-file-name { overflow-wrap:anywhere; font-weight:500; font-size:14px; }
+#suichuan .share-file > button { flex-shrink:0; font-size:12px; min-height:36px; padding:6px 10px; }
+#suichuan .share-file-details { margin:20px 0; padding:12px 0; border-top:1px solid var(--qt-border); border-bottom:1px solid var(--qt-border); }
+#suichuan .share-file-details summary { cursor:pointer; font-size:13px; }
+#suichuan .share-file-details .share-files { border-top:0; margin-bottom:0; }
+#suichuan .share-drop { padding:30px 12px; text-align:center; color:var(--qt-muted); }
+#suichuan .share-limit { color:var(--qt-muted); font-size:12px; margin:12px 0; }
+#suichuan .share-field-label { font-size:13px; margin-top:24px; margin-bottom:10px; }
+#suichuan .share-expiry { display:flex; flex-wrap:wrap; gap:10px; }
+#suichuan .share-expiry [aria-pressed="true"] { border-color:var(--qt-text); background:var(--qt-subtle); }
+#suichuan .share-summary { font-size:13px; margin:22px 0 14px; }
+#suichuan .share-heading, #suichuan .share-footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+#suichuan .share-heading > span { font-size:12px; }
+#suichuan .share-link-area { display:grid; grid-template-columns:174px minmax(0,1fr); align-items:center; gap:24px; padding:5px 0; }
+#suichuan .share-qr { display:block; width:174px; height:174px; image-rendering:pixelated; border-radius:8px; background:white; }
+#suichuan .share-url { width:100%; min-width:0; padding:9px 10px; border:1px solid var(--qt-border); border-radius:8px; color:var(--qt-text); background:var(--qt-bg); font-size:12px; }
+#suichuan .share-actions { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+#suichuan .share-link-controls { min-width:0; }
+#suichuan .share-open { display:inline-block; color:var(--qt-text); font-size:12px; margin-top:4px; }
+#suichuan .share-footer { border-top:1px solid var(--qt-border); margin-top:20px; padding-top:16px; }
+#suichuan .share-panel-ended { display:flex; align-items:center; justify-content:space-between; gap:24px; padding:22px 24px; }
+#suichuan .share-ended-message { display:flex; align-items:center; gap:14px; min-width:0; }
+#suichuan .share-ended-mark { display:grid; place-items:center; flex:none; width:30px; height:30px; border:1px solid var(--qt-border); border-radius:50%; font-size:17px; }
+#suichuan .share-ended-copy { min-width:0; }
+#suichuan .share-ended-copy h2 { font-size:16px; }
+#suichuan .share-ended-copy p { margin-top:5px; font-size:12px; line-height:1.6; overflow-wrap:anywhere; }
+#suichuan .share-panel-ended > button { flex-shrink:0; font-size:13px; }
+#suichuan .share-record { margin-bottom:12px; }
+#suichuan .share-record-main { display:flex; align-items:center; justify-content:space-between; gap:14px; }
+#suichuan .share-record h3 { font-size:14px; font-weight:500; }
+#suichuan .share-record-main > div { min-width:0; }
+#suichuan .share-record-details .share-files { margin:16px 0 12px; }
+#suichuan .share-record-details > p { line-height:1.6; }
+#suichuan .share-record-details .share-file > span { flex-shrink:0; }
+#suichuan .share-recipient { font-size:13px; margin:8px 0; overflow-wrap:anywhere; }
+#suichuan .share-device-name { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:13px; margin-top:20px; padding-top:16px; border-top:1px solid var(--qt-border); }
+#suichuan .share-device-name > span { min-width:0; overflow-wrap:anywhere; }
+#suichuan .share-device-name > button { flex-shrink:0; font-size:12px; }
+#suichuan .share-name-form { width:100%; min-width:0; }
+#suichuan .share-name-form label { display:block; margin-bottom:8px; }
+#suichuan .share-name-form input { font-size:16px; }
+#suichuan .share-name-form p { margin-top:8px; }
+#suichuan .share-record button { flex-shrink:0; font-size:12px; }
+#suichuan .share-progress { margin:20px 0; }
+#suichuan .share-progress progress { display:block; width:100%; height:5px; border:0; appearance:none; border-radius:4px; overflow:hidden; background:var(--qt-subtle); }
+#suichuan .share-progress progress::-webkit-progress-bar { background:var(--qt-subtle); }
+#suichuan .share-progress progress::-webkit-progress-value { background:var(--qt-text); }
+#suichuan .share-progress progress::-moz-progress-bar { background:var(--qt-text); }
+#suichuan .share-progress p { margin-top:8px; }
+#suichuan .share-receive { width:min(100%,560px); margin:35px auto; padding:0 24px 45px; }
+#suichuan .share-receive h1 { font-size:27px; font-weight:500; text-align:center; margin-bottom:10px; }
+#suichuan .share-receive .share-description { text-align:center; }
+#suichuan .share-receive .share-panel { margin-top:26px; }
+#suichuan .share-receive .share-files { margin-top:0; }
+#suichuan .share-receive .share-main-action { width:100%; margin-top:18px; min-height:44px; }
+#suichuan .share-detail { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:12px 0; font-size:12px; color:var(--qt-muted); }
+#suichuan .share-detail > :last-child { color:var(--qt-text); }
+#suichuan .share-message { font-size:13px; color:var(--qt-muted); text-align:center; margin-top:18px; }
+#suichuan .share-feedback { margin:14px 0; font-size:13px; overflow-wrap:anywhere; }
+#suichuan a.qt-brand { color:inherit; text-decoration:none; }
+@media (max-width:600px) {
+  #suichuan .share-panel { padding:18px; }
+  #suichuan .share-panel-ended { align-items:flex-start; flex-direction:column; gap:16px; }
+  #suichuan .share-panel-ended > button { align-self:flex-end; min-height:44px; }
+  #suichuan .share-link-area { grid-template-columns:minmax(0,1fr); gap:18px; }
+  #suichuan .share-qr { margin:auto; }
+  #suichuan .share-actions > button { flex:1; }
+  #suichuan .share-receive { margin-top:24px; padding:0 16px 32px; }
+  #suichuan .share-url { font-size:16px; }
+}
+@media (pointer:coarse) {
+  #suichuan .share-panel button, #suichuan .share-tabs button, #suichuan .share-record button { min-height:44px; }
+}
+
+#suichuan .share-counts { margin-top:8px; line-height:1.7; }
+#suichuan .share-claims { margin-top:16px; }
+#suichuan .share-claim { border-top:1px solid var(--qt-border); padding:14px 0; }
+#suichuan .share-claim-name { font-size:13px; overflow-wrap:anywhere; margin-bottom:5px; }
+#suichuan .share-claim .share-progress { margin:10px 0 0; }
+#suichuan .share-record-main { flex-wrap:wrap; }
+#suichuan .share-record-main > div { flex:1; min-width:130px; }
+#suichuan .share-record-main > button + button { margin-left:-6px; }
+
+/* 仅链接分享的发送界面使用精简布局，设备发送及领取页沿用原样式。 */
+#suichuan:has([data-mode="share"][aria-selected="true"]) .qt-history-footer { justify-content:flex-end; }
+#suichuan .share-panel-draft { border:0; padding:0; border-radius:0; }
+#suichuan .share-upload { padding-top:4px; border:1px solid var(--qt-border); border-radius:14px; background:var(--qt-bg); }
+#suichuan .share-upload .share-drop { min-height:108px; padding:20px 23px; text-align:left; font-size:15px; line-height:1.8; }
+#suichuan .share-compose-actions { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:20px; }
+#suichuan .share-compose-actions > span { min-width:0; }
+#suichuan .share-compose-actions > button { flex-shrink:0; border-radius:10px; padding:10px 18px; margin-left:auto; }
+#suichuan .share-mode-description { margin-top:10px; font-size:12px; color:var(--qt-muted); }
+#suichuan .share-settings { border-top:1px solid var(--qt-border); margin-top:16px; padding-top:14px; }
+#suichuan .share-settings > summary, #suichuan .share-more-actions > summary { width:max-content; font-size:12px; color:var(--qt-muted); cursor:pointer; border-radius:4px; }
+#suichuan .share-settings > summary:focus-visible, #suichuan .share-more-actions > summary:focus-visible { outline:2px solid var(--qt-accent); outline-offset:3px; }
+#suichuan .share-mode-field { min-width:0; border:0; padding:0; margin:16px 0 0; }
+#suichuan .share-mode-field legend { padding:0; margin-bottom:10px; font-size:13px; font-weight:500; }
+#suichuan .share-mode-options { display:flex; gap:10px; }
+#suichuan .share-mode-choice { display:flex; align-items:center; gap:8px; flex:1; min-width:0; padding:10px 14px; border:1px solid var(--qt-border); border-radius:10px; font-size:13px; cursor:pointer; }
+#suichuan .share-mode-choice:has(input:checked) { border-color:var(--qt-text); background:var(--qt-subtle); }
+#suichuan .share-mode-choice:has(input:disabled) { cursor:not-allowed; opacity:.6; }
+#suichuan .share-mode-choice input { margin:0; accent-color:var(--qt-text); flex:none; }
+#suichuan .share-mode-field .share-limit { margin:9px 0 0; }
+#suichuan .share-expiry-row { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin-top:16px; font-size:13px; }
+#suichuan .share-expiry-row select { color:var(--qt-text); background:var(--qt-bg); border:1px solid var(--qt-border); border-radius:8px; padding:7px 10px; cursor:pointer; }
+#suichuan .share-keep-open { margin-top:18px; color:var(--qt-muted); font-size:12px; }
+#suichuan .share-more-actions { margin-left:auto; text-align:right; }
+#suichuan .share-more-actions > summary { margin-left:auto; }
+#suichuan .share-more-actions > button { margin-top:10px; }
+@media (max-width:600px) {
+  #suichuan .share-panel-draft { padding:0; }
+  #suichuan .share-upload .share-drop { min-height:116px; padding:17px 19px; }
+  #suichuan .share-mode-choice { padding:10px; }
+  #suichuan .share-expiry-row select { font-size:16px; }
+}
+@media (pointer:coarse) {
+  #suichuan .share-settings > summary, #suichuan .share-more-actions > summary { min-height:44px; align-content:center; }
+  #suichuan .share-mode-choice, #suichuan .share-expiry-row select { min-height:44px; }
+}

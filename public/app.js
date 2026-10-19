@@ -1,14 +1,18 @@
 import { Connection } from './connection.js';
 import { Transfers } from './transfer.js';
+import { ShareComposer } from './share-ui.js?v=20261019-multiple-share';
+import { deviceNames, validDeviceName } from './device-name.js';
 
 const root = document.querySelector('#suichuan');
+// 兼容静态发布切换瞬间仍引用新脚本的旧 HTML。
+root.querySelector('.qt-section-heading .qt-connection')?.remove();
 const get = (selector) => root.querySelector(selector);
 const all = (selector) => [...root.querySelectorAll(selector)];
 const connection = new Connection();
 const transfers = new Transfers(connection);
 const ALL_ONLINE = 'all-online';
-const savedTarget = localStorage.getItem('suichuan-target');
-const state = { peers: [], files: [], target: savedTarget === ALL_ONLINE ? '' : savedTarget || '', requests: [], modal: '', code: '', codeUntil: 0, sending: false, expandedGroups: new Set() };
+const savedTarget = deviceNames.read('suichuan-target');
+const state = { peers: [], files: [], target: savedTarget === ALL_ONLINE ? '' : savedTarget || '', requests: [], modal: '', code: '', codeUntil: 0, sending: false, expandedGroups: new Set(), connectionError: '' };
 const editor = get('[data-editor]');
 const overlay = get('.qt-overlay');
 const imagePreview = get('[data-image-preview]');
@@ -17,6 +21,8 @@ const fileInput = get('[data-files]');
 let toastTimer;
 let lastFocus;
 let previewId;
+let leaveGuardInstalled = false;
+let shareUI;
 
 function element(tag, className, text) {
   const el = document.createElement(tag);
@@ -46,30 +52,74 @@ function tell(message) {
 
 const sizeLabel = (n) => n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1048576).toFixed(1)} MB`;
 const isActive = (item) => !['completed', 'failed', 'cancelled'].includes(item.status);
+const needsSaving = (item) => item.incoming && item.status === 'completed' && item.kind !== 'text' && item.blob && !item.downloadStarted && (!item.imageCopied || item.mime === 'image/gif');
+const canCopyImage = () => Boolean(navigator.clipboard?.write && globalThis.ClipboardItem && (!ClipboardItem.supports || ClipboardItem.supports('image/png')));
+
+function peerLabel(peer) {
+  const duplicates = state.peers.filter((entry) => entry.name === peer.name);
+  if (duplicates.length < 2) {
+    return peer.name;
+  }
+  let length = 6;
+  while (length < peer.id.length && duplicates.some((entry) => entry.id !== peer.id && entry.id.slice(0, length) === peer.id.slice(0, length))) {
+    length += 2;
+  }
+  return `${peer.name} · ${peer.id.slice(0, length)}`;
+}
+
+function beforeLeave(event) {
+  if (transfers.items.some((item) => isActive(item) || needsSaving(item))) {
+    event.preventDefault();
+    event.returnValue = true;
+  }
+}
+
+function updateLeaveGuard() {
+  const unsaved = transfers.items.filter(needsSaving).length;
+  const needed = unsaved > 0 || transfers.items.some(isActive);
+  if (needed !== leaveGuardInstalled) {
+    if (needed) {
+      window.addEventListener('beforeunload', beforeLeave);
+    } else {
+      window.removeEventListener('beforeunload', beforeLeave);
+    }
+    leaveGuardInstalled = needed;
+  }
+  const note = get('[data-unsaved-note]');
+  note.hidden = unsaved === 0;
+  note.textContent = unsaved ? `还有 ${unsaved} 个文件需要保存，刷新、关闭或清空后将无法找回。` : '';
+}
+
+function renderReception(reception) {
+  const note = get('[data-reception-note]');
+  note.hidden = !connection.ready || !reception || reception.pages < 2;
+  note.textContent = reception?.here
+    ? '本页负责接收新内容。同一浏览器的其他随传页面只用于发送。'
+    : '新内容由本机另一个随传页面接收，请切换到显示「本页负责接收」的页面查看。关闭它后，由剩余页面中的一页自动接收后续内容。';
+}
 
 function renderTarget() {
   const online = state.peers.filter((p) => p.online);
-  if (online.length === 1 && state.target !== ALL_ONLINE) {
+  if (!state.target && online.length === 1) {
     state.target = online[0].id;
-  } else if (!state.target && online.length) {
-    state.target = online[0].id;
+    deviceNames.write('suichuan-target', state.target);
   }
   target.replaceChildren();
-  if (online.length || state.target === ALL_ONLINE) {
+  if (online.length) {
     target.add(new Option(`全部在线设备（${online.length} 台）`, ALL_ONLINE));
   }
   if (!online.length) {
-    if (state.target !== ALL_ONLINE) {
-      target.add(new Option(state.peers.length ? '等待设备上线' : '先连接另一台电脑', ''));
-    }
+    target.add(new Option(state.peers.length ? '等待接收设备上线' : '先连接另一台电脑', state.target === ALL_ONLINE ? ALL_ONLINE : ''));
   } else {
     if (state.target !== ALL_ONLINE && !online.some((p) => p.id === state.target)) {
-      target.add(new Option('上次选择的设备已离线', ''));
+      const selected = state.peers.find((peer) => peer.id === state.target);
+      const label = !state.target ? '选择接收设备' : selected ? `${peerLabel(selected)} · 已离线` : '原接收设备不可用，请重新选择';
+      target.add(new Option(label, state.target));
     }
     for (const peer of online) {
-      target.add(new Option(peer.name, peer.id));
+      target.add(new Option(peerLabel(peer), peer.id));
     }
-    target.value = state.target === ALL_ONLINE || online.some((p) => p.id === state.target) ? state.target : '';
+    target.value = state.target;
   }
   target.disabled = !online.length || !connection.ready;
   updateSend();
@@ -80,16 +130,14 @@ function updateSend() {
   const recipients = state.peers.filter((p) => p.online && (broadcast || p.id === state.target));
   const send = get('[data-action="send"]');
   send.disabled = !connection.ready || !recipients.length || state.sending || (!editor.value.length && !state.files.length);
-  send.classList.toggle('is-broadcast', broadcast);
-  send.setAttribute('aria-label', broadcast ? `群发给 ${recipients.length} 台设备` : '发送');
-  send.dataset.tooltip = broadcast ? `群发给 ${recipients.length} 台设备` : '发送';
-  get('[data-send-label]').hidden = !broadcast;
-  get('[data-send-label]').textContent = broadcast ? `群发 ${recipients.length} 台` : '';
   const note = get('[data-send-note]');
-  note.hidden = connection.ready && Boolean(recipients.length) && !broadcast;
-  note.textContent = !connection.ready ? '正在连接服务，稍后即可发送' : recipients.length ? '发送给所有已配对且在线的设备' : state.peers.length ? '等待接收设备上线' : '连接另一台设备以开始';
-  get('[data-action="connect"]').disabled = !connection.ready;
-  get('[data-connection]').textContent = connection.ready ? '已连接' : '正在重连';
+  note.textContent = !connection.ready ? state.connectionError : recipients.length && broadcast ? '发送给所有已配对且在线的设备' : '';
+  note.hidden = shareUI?.mode === 'share' || !note.textContent;
+  for (const connect of all('[data-action="connect"], [data-action="first-connect"]')) {
+    connect.disabled = !connection.ready;
+  }
+  get('[data-onboarding]').hidden = shareUI?.mode === 'share' || !connection.ready || state.peers.length > 0;
+  root.dataset.connection = connection.ready ? 'ready' : 'connecting';
 }
 
 function renderAttachments() {
@@ -112,15 +160,11 @@ function renderAttachments() {
     list.append(row);
   }
   updateSend();
+  shareUI?.render();
 }
 
 function addFiles(files) {
-  const max = connection.config?.maxFileBytes || 50 * 1048576;
   for (const file of files) {
-    if (file.size > max) {
-      tell(`单个文件上限为 ${sizeLabel(max)}，请拆分或选择更小的文件`);
-      continue;
-    }
     if (state.files.length >= 8) {
       tell('一次最多添加 8 个文件，请分批发送');
       break;
@@ -132,19 +176,32 @@ function addFiles(files) {
 }
 
 function renderTransfers() {
+  updateLeaveGuard();
   const list = get('[data-transfers]');
   const focused = list.contains(document.activeElement) ? document.activeElement : null;
   const focusAction = focused?.dataset.action;
   const focusId = focused?.dataset.id;
   list.replaceChildren();
   const activeGroups = new Set(transfers.items.filter((item) => item.groupId && isActive(item)).map((item) => item.groupId));
-  get('[data-count]').textContent = transfers.items.filter((item) => !item.groupId).length + transfers.groups.length || '';
-  get('[data-action="clear"]').hidden = !transfers.items.some((item) => !isActive(item) && !activeGroups.has(item.groupId));
-  if (!transfers.items.length) {
+  const count = transfers.items.filter((item) => !item.groupId && !item.shareId).length + transfers.groups.length + (shareUI?.entries.length || 0);
+  const sharing = shareUI?.mode === 'share';
+  const history = get('.qt-transfers');
+  const title = sharing ? '历史记录' : '本次传输';
+  history.hidden = sharing && count === 0;
+  history.setAttribute('aria-label', title);
+  get('.qt-section-heading h2').firstChild.textContent = `${title} `;
+  get('[data-count]').textContent = count || '';
+  get('[data-action="clear"]').hidden = !transfers.items.some((item) => !item.shareId && !isActive(item) && !activeGroups.has(item.groupId)) && !shareUI?.entries.some((s) => ['completed', 'cancelled', 'expired', 'unavailable', 'stopped'].includes(s.status));
+  get('.qt-history-footer > span').hidden = sharing;
+  get('.qt-history-footer').hidden = sharing && get('[data-action="clear"]').hidden;
+  if (!sharing && !transfers.items.length && !shareUI?.entries.length) {
     list.append(element('p', 'qt-empty', '发出的内容和收到的内容会出现在这里'));
   }
   const shown = new Set();
   for (const item of transfers.items) {
+    if (item.shareId) {
+      continue;
+    }
     if (item.groupId) {
       if (!shown.has(item.groupId)) {
         const group = transfers.groups.find((entry) => entry.id === item.groupId);
@@ -167,7 +224,7 @@ function renderTransfers() {
 }
 
 function renderTransfer(item) {
-  const row = element('article', 'qt-transfer-row');
+  const row = element('article', `qt-transfer-row${item.groupId ? '' : ' qt-transfer-card'}`);
   row.dataset.transfer = item.localId;
   row.dataset.status = item.status;
   row.dataset.incoming = String(item.incoming);
@@ -182,6 +239,10 @@ function renderTransfer(item) {
   body.append(element('div', `qt-transfer-meta${item.status === 'failed' ? ' qt-error-note' : ''}`, `${item.incoming ? '来自' : '发往'} ${item.peerName} · ${sizeLabel(item.size)} · ${status}`));
   if (item.reason) {
     body.append(element('div', 'qt-transfer-meta qt-error-note', item.reason));
+  }
+  if (item.incoming && item.status === 'completed' && item.kind !== 'text') {
+    const saved = item.downloadStarted ? '已发起下载，请确认文件已保存' : item.imageCopied ? item.mime === 'image/gif' ? '已复制静态图片，动图原文件尚未保存' : '已复制图片，可粘贴到其他应用' : '尚未保存，刷新或关闭页面后将丢失';
+    body.append(element('div', 'qt-transfer-meta', saved));
   }
   if (isActive(item)) {
     const progress = element('progress');
@@ -207,13 +268,21 @@ function renderTransfer(item) {
   if (isActive(item)) {
     actions.append(button('取消', 'cancel', item.localId));
   } else if (item.status === 'completed' && item.incoming) {
-    actions.append(button(item.kind === 'text' ? '复制' : '保存', item.kind === 'text' ? 'copy-text' : 'save-file', item.localId));
+    if (item.url && canCopyImage()) {
+      const copy = button(item.copying ? '正在复制…' : '复制图片', 'copy-image', item.localId);
+      copy.disabled = Boolean(item.copying);
+      actions.append(copy);
+    }
+    actions.append(button(item.kind === 'text' ? '复制' : item.downloadStarted ? '再次保存' : '保存', item.kind === 'text' ? 'copy-text' : 'save-file', item.localId));
   } else if (!item.incoming && item.status !== 'completed') {
     const retry = button('重新发送', 'retry', item.localId);
     retry.disabled = !connection.ready || !state.peers.some((p) => p.id === item.peerId && p.online);
     actions.append(retry);
   }
-  row.append(body, actions);
+  row.append(body);
+  if (actions.childElementCount) {
+    row.append(actions);
+  }
   return row;
 }
 
@@ -225,7 +294,7 @@ function renderGroup(group) {
   const active = items.filter(isActive);
   const queued = active.filter((item) => item.status === 'queued').length;
   const delivered = group.peers.filter((peer) => items.filter((item) => item.peerId === peer.id).every((item) => item.status === 'completed')).length;
-  const row = element('article', 'qt-transfer-group');
+  const row = element('article', 'qt-transfer-card qt-transfer-group');
   row.dataset.group = group.id;
   const top = element('div', 'qt-group-top');
   const info = element('div', 'qt-group-info');
@@ -316,8 +385,20 @@ function renderDevices() {
     const row = element('div', 'qt-device-row');
     row.dataset.peer = peer.id;
     const info = element('div', 'qt-device-info');
+    const name = element('div', 'qt-device-name');
+    const status = !connection.ready ? 'unknown' : peer.online ? 'online' : 'offline';
+    const statusLabel = { online: '在线', offline: '离线', unknown: '状态更新中' }[status];
+    const dot = element('span', 'qt-device-status');
+    dot.dataset.state = status;
+    dot.setAttribute('role', 'img');
+    dot.setAttribute('aria-label', statusLabel);
+    dot.title = statusLabel;
+    name.append(dot, element('strong', '', peerLabel(peer)));
+    info.append(name);
     const busy = peer.busy > 0 || transfers.items.some((i) => i.peerId === peer.id && isActive(i));
-    info.append(element('strong', '', peer.name), element('small', '', `${peer.online ? '在线' : '离线'}${busy ? ' · 传输结束后可忘记配对' : ''}`));
+    if (busy) {
+      info.append(element('small', '', '传输结束后可忘记配对'));
+    }
     const forget = button('忘记', 'forget', peer.id);
     forget.disabled = busy || !connection.ready;
     row.append(info, forget);
@@ -342,19 +423,88 @@ function openDialog(type) {
   overlay.hidden = false;
   get('.qt-header').inert = true;
   get('.qt-main').inert = true;
-  get('[data-dialog-title]').textContent = type === 'devices' ? '我的设备' : type === 'approval' ? '确认新设备' : '连接设备';
+  get('[data-dialog-title]').textContent = type === 'devices' ? '我的设备' : type === 'approval' ? '确认新设备' : type === 'name' ? '给这台设备起个名字' : '连接设备';
+  get('[data-onboarding-name-panel]').hidden = type !== 'name';
   get('[data-pair-panel]').hidden = type !== 'pair';
   get('[data-devices-panel]').hidden = type !== 'devices';
   get('[data-approval-panel]').hidden = type !== 'approval';
   if (type === 'devices') {
-    get('[data-name-input]').value = connection.device?.name || '我的电脑';
+    get('[data-name-input]').value = connection.device?.name || deviceNames.device();
     renderDevices();
+  }
+  if (type === 'name') {
+    get('[data-onboarding-name]').value = connection.device?.name || deviceNames.device();
+    get('[data-name-error]').hidden = true;
   }
   if (type === 'approval' && state.requests[0]) {
     get('[data-request-name]').textContent = state.requests[0].name;
     get('[data-request-id]').textContent = `设备 ${state.requests[0].fingerprint.slice(0, 12)} · 请求连接`;
   }
   get('[data-action="close"]').focus();
+  if (type === 'name') {
+    get('[data-onboarding-name]').focus();
+    get('[data-onboarding-name]').select();
+  }
+}
+
+async function openPairing() {
+  openDialog('pair');
+  pairTab('show');
+  if (state.codeUntil <= Date.now()) {
+    await newCode();
+  }
+}
+
+async function saveName(value) {
+  const name = value.trim();
+  if (!validDeviceName(name)) {
+    throw new Error('请输入 1–24 个字符的设备名称');
+  }
+  await connection.rpc('device.rename', { name });
+  deviceNames.rememberDevice(name);
+  deviceNames.write('suichuan-name-confirmed', connection.device.id);
+}
+
+async function imageAsPng(item) {
+  if (item.blob.type === 'image/png') {
+    return item.blob;
+  }
+  const image = new Image();
+  image.src = item.url;
+  await image.decode();
+  const canvas = document.createElement('canvas');
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  canvas.getContext('2d').drawImage(image, 0, 0);
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob);
+      } else {
+        reject(new Error('图片转换失败'));
+      }
+    }, 'image/png');
+  });
+}
+
+async function copyImage(item) {
+  if (!item?.blob || !item.url || item.copying || !canCopyImage()) {
+    return;
+  }
+  item.copying = true;
+  renderTransfers();
+  try {
+    // Start the clipboard write in the click's activation scope, even when
+    // decoding/converting a JPEG, WebP or GIF to PNG is asynchronous.
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': imageAsPng(item) })]);
+    item.imageCopied = true;
+    tell(item.mime === 'image/gif' ? '已复制静态图片；保留动图请保存原文件' : '图片已复制，可粘贴到其他应用');
+  } catch {
+    tell('无法复制图片，请允许剪贴板权限，或点击保存下载图片');
+  } finally {
+    item.copying = false;
+    renderTransfers();
+  }
 }
 
 function pairTab(tab) {
@@ -421,7 +571,7 @@ async function sendBatch() {
   }
   state.sending = true;
   if (!broadcast) {
-    localStorage.setItem('suichuan-target', peers[0].id);
+    deviceNames.write('suichuan-target', peers[0].id);
   }
   editor.value = '';
   for (const f of state.files) {
@@ -433,6 +583,7 @@ async function sendBatch() {
   renderAttachments();
   try {
     transfers.sendBatch(peers, sources, { group: broadcast });
+    updateLeaveGuard();
   } finally {
     state.sending = false;
     updateSend();
@@ -443,17 +594,33 @@ async function action(name, el) {
   const item = transfers.items.find((i) => i.localId === el.dataset.id);
   const group = transfers.groups.find((entry) => entry.id === el.dataset.id);
   switch (name) {
+    case 'first-connect':
     case 'connect':
       if (state.requests.length) {
         openDialog('approval');
+      } else if (deviceNames.needsConfirmation(connection.device?.id, connection.device?.name)) {
+        openDialog('name');
       } else {
-        openDialog('pair');
-        pairTab('show');
-        if (state.codeUntil <= Date.now()) {
-          await newCode();
-        }
+        await openPairing();
       }
       break;
+    case 'name-and-connect': {
+      const error = get('[data-name-error]');
+      error.hidden = true;
+      el.disabled = true;
+      try {
+        await saveName(get('[data-onboarding-name]').value);
+        if (state.modal === 'name') {
+          await openPairing();
+        }
+      } catch (err) {
+        error.textContent = err.message;
+        error.hidden = false;
+      } finally {
+        el.disabled = false;
+      }
+      break;
+    }
     case 'devices': openDialog('devices'); break;
     case 'close':
       if (state.joinId) {
@@ -473,9 +640,10 @@ async function action(name, el) {
       }
       break;
     case 'rename': {
-      const value = get('[data-name-input]').value.trim();
-      await connection.rpc('device.rename', { name: value });
-      localStorage.setItem('suichuan-name', value);
+      await saveName(get('[data-name-input]').value);
+      if (state.modal === 'devices') {
+        closeDialog();
+      }
       tell('设备名称已更新');
       break;
     }
@@ -503,6 +671,7 @@ async function action(name, el) {
       break;
     }
     case 'copy-text': await navigator.clipboard.writeText(item.text); tell('文字已复制'); break;
+    case 'copy-image': await copyImage(item); break;
     case 'preview-image': openImagePreview(item); break;
     case 'close-image': closeImagePreview(); break;
     case 'save-file': {
@@ -511,11 +680,19 @@ async function action(name, el) {
       link.href = url;
       link.download = item.name.replace(/[\\/\u0000-\u001f]/g, '_') || '随传文件';
       link.click();
+      item.downloadStarted = true;
+      renderTransfers();
+      tell('已发起下载，请在浏览器下载列表中确认保存成功');
       setTimeout(() => URL.revokeObjectURL(url), 30000);
       break;
     }
     case 'clear':
+      if (transfers.items.some(needsSaving) && !window.confirm('还有文件需要保存。清空后无法找回，确定清空已结束记录？')) {
+        break;
+      }
       transfers.clear();
+      shareUI?.clear();
+      updateLeaveGuard();
       state.expandedGroups = new Set([...state.expandedGroups].filter((id) => transfers.groups.some((entry) => entry.id === id)));
       break;
   }
@@ -563,6 +740,12 @@ get('[data-code-input]').addEventListener('keydown', (event) => {
     join().catch((error) => tell(error.message));
   }
 });
+get('[data-onboarding-name]').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && !event.isComposing) {
+    event.preventDefault();
+    get('[data-action="name-and-connect"]').click();
+  }
+});
 document.addEventListener('keydown', (event) => {
   if (overlay.hidden) {
     return;
@@ -586,7 +769,7 @@ document.addEventListener('keydown', (event) => {
 target.addEventListener('change', () => {
   state.target = target.value;
   if (state.target !== ALL_ONLINE) {
-    localStorage.setItem('suichuan-target', state.target);
+    deviceNames.write('suichuan-target', state.target);
   }
   updateSend();
 });
@@ -608,9 +791,11 @@ composer.addEventListener('drop', (event) => { event.preventDefault(); composer.
 document.addEventListener('dragover', (event) => event.preventDefault());
 document.addEventListener('drop', (event) => event.preventDefault());
 connection.addEventListener('ready', (e) => {
+  state.connectionError = '';
   state.peers = e.detail.peers;
   get('[data-local-name]').textContent = e.detail.device.name;
   renderTarget();
+  renderReception(e.detail.reception);
   renderTransfers();
 });
 connection.addEventListener('peers', (e) => {
@@ -618,23 +803,27 @@ connection.addEventListener('peers', (e) => {
   if (connection.device) {
     connection.device.name = e.detail.name;
   }
+  deviceNames.rememberDevice(e.detail.name);
   get('[data-local-name]').textContent = e.detail.name;
   renderTarget();
+  renderReception(e.detail.reception);
   renderTransfers();
 });
 connection.addEventListener('disconnected', () => {
+  state.connectionError = '连接已中断，正在自动重试';
   state.requests = [];
   state.joinId = null;
   state.codeUntil = 0;
   get('[data-join]').disabled = false;
   get('[data-join]').textContent = '连接';
   updateSend();
+  renderReception();
   renderTransfers();
 });
 connection.addEventListener('fatal', (e) => {
-  get('[data-send-note]').hidden = false;
-  get('[data-send-note]').textContent = e.detail.message;
-  get('[data-connection]').textContent = '连接不可用';
+  state.connectionError = e.detail.message;
+  updateSend();
+  root.dataset.connection = 'unavailable';
   tell(e.detail.message);
 });
 connection.addEventListener('notice', (e) => tell(e.detail.message));
@@ -666,6 +855,21 @@ connection.addEventListener('pair.codeExpired', (e) => {
   }
 });
 setInterval(updateCode, 1000);
+shareUI = new ShareComposer({
+  root, connection, transfers, files: () => state.files, pick: () => fileInput.click(), addFiles, tell,
+  remove: (id) => action('remove-file', { dataset: { id } }),
+  consumeFiles: (ids) => {
+    const submitted = new Set(ids);
+    for (const entry of state.files) {
+      if (submitted.has(entry.id) && entry.url) {
+        URL.revokeObjectURL(entry.url);
+      }
+    }
+    state.files = state.files.filter((entry) => !submitted.has(entry.id));
+    renderAttachments();
+  },
+  changed: () => { updateSend(); renderTransfers(); }
+});
 renderTarget();
 renderTransfers();
 connection.start();

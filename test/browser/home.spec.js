@@ -9,15 +9,15 @@ test('home opens the existing transfer page without registering a device during 
   expect(await page.evaluate(() => indexedDB.databases())).toEqual([]);
   await page.getByRole('link', { name: '开始传输', exact: true }).click();
   await expect(page).toHaveURL(/\/transfer$/);
-  await expect(page.locator('[data-connection]')).toHaveText('已连接');
+  await expect(page.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready');
   const before = await page.evaluate(async () => (await (await import('/identity.js')).loadIdentity()).fingerprint);
   await page.goto('/');
   await page.getByRole('link', { name: '打开随传', exact: true }).click();
-  await expect(page.locator('[data-connection]')).toHaveText('已连接');
+  await expect(page.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready');
   const after = await page.evaluate(async () => (await (await import('/identity.js')).loadIdentity()).fingerprint);
   expect(after).toBe(before);
   await page.goto('/transfer/');
-  await expect(page.locator('[data-connection]')).toHaveText('已连接');
+  await expect(page.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready');
 });
 
 test('demo cycles all three types and can pause, select, send and resume', async ({ page }) => {

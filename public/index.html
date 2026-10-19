@@ -4,10 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<meta name="description" content="随传：无需安装、无需账号，在配对的电脑之间传递文字、截图和小文件。配对一次，长期互传。">
-<title>随传 · 随手一传，换台继续</title>
+<meta name="description" content="随传 XCopy 是简单、极速、安全的跨设备文件传输工具。免安装、免注册，在已配对的电脑间互传文字、截图和小文件；优先 P2P 点对点直传，无法直连才中转，服务器不留存传输内容。">
+<title>随传 XCopy - 跨设备文件传输、文字与截图快传</title>
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://xcopy.werfamily.fun/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="随传 XCopy">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:url" content="https://xcopy.werfamily.fun/">
+<meta property="og:title" content="随传 XCopy - 简单、极速、安全的跨设备快传">
+<meta property="og:description" content="免安装、免注册，在配对设备间互传文字、截图和小文件。优先 P2P 直传，中转不留存传输内容。">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebSite","name":"随传","alternateName":["随传 XCopy","XCopy"],"url":"https://xcopy.werfamily.fun/","inLanguage":"zh-CN"}
+</script>
 <link rel="icon" href="/icon.svg?v=20261018-brand" type="image/svg+xml">
-<link rel="stylesheet" href="/home.css?v=20261018-typewriter-loop">
+<link rel="stylesheet" href="/home.css?v=20261018-xcopy-cli">
 <script type="module" src="/home.js"></script>
 </head>
 <body>
@@ -27,15 +38,15 @@
 <div class="home">
   <header class="site-header">
     <a class="brand" href="/" aria-label="随传首页"><svg class="brand-mark" viewBox="0 0 128 84" aria-hidden="true"><use href="/icon.svg?v=20261018-brand#mark"/></svg><span class="brand-name">随传<small>XCOPY</small></span></a>
-    <nav aria-label="首页导航"><a class="quiet-link how-link" href="#how">如何使用</a><a class="quiet-link faq-link" href="#questions">常见问题</a><a class="button header-start" href="/transfer">打开随传 <svg class="icon" aria-hidden="true"><use href="#i-up-right"/></svg></a></nav>
+    <nav aria-label="首页导航"><a class="quiet-link how-link" href="#why">为什么随传</a><a class="quiet-link faq-link" href="#questions">常见问题</a><a class="button header-start" href="/transfer">打开随传 <svg class="icon" aria-hidden="true"><use href="#i-up-right"/></svg></a></nav>
   </header>
   <main>
     <section class="hero" aria-labelledby="home-title">
-      <p class="eyebrow">你的电脑之间，一点就到。</p>
+      <p class="eyebrow">简单 · 极速 · 安全快传</p>
       <h1 id="home-title" aria-label="这边复制，那边继续。"><span class="typewriter-line typewriter-first" aria-hidden="true"><span class="typewriter-text">这边复制，</span><span class="typewriter-cursor">_</span></span><br><span class="typewriter-line typewriter-last" aria-hidden="true"><span class="typewriter-text">那边继续。</span><span class="typewriter-cursor">_</span></span></h1>
-      <p class="hero-description">一段文字、一张截图、一个文件。<br>无需安装，打开网页就能传到另一台电脑。</p>
+      <p class="hero-description">文字、截图、小文件，随手传到另一台电脑。<br>打开网页，配对设备，接着做你的事。</p>
       <div class="hero-actions"><a class="button" href="/transfer">开始传输 <svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></div>
-      <p class="hero-note">无需账号 · 配对一次，长期互传</p>
+      <p class="hero-note">免安装 · 免注册 · 优先 P2P 直传</p>
     </section>
     <section class="demo" id="demo" aria-label="传输过程演示" data-demo>
       <div class="demo-toolbar">
@@ -57,18 +68,22 @@
           <div class="inbox"><div class="inbox-empty" data-empty><svg class="icon" aria-hidden="true"><use href="#i-inbox"/></svg><span data-empty-label>已准备好接收</span><small>发送后，内容会出现在这里。</small></div><div class="received" data-received hidden><span class="receipt-label"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>已收到 · 来自我的 MacBook</span><div class="receipt-content" data-received-content></div></div></div>
         </div>
       </div>
-      <div class="demo-foot"><span>交互演示，不会实际传输</span><span>真正使用时，两台电脑都需打开随传。</span></div>
+      <div class="demo-foot"><span>交互演示，不会实际传输</span><span>实际传输时，双方需保持传输页打开。</span></div>
       <span class="sr-only" data-demo-announcement role="status" aria-live="polite"></span>
       <noscript><p class="no-script">开启 JavaScript 可播放传输演示；使用随传也需要浏览器支持 JavaScript。</p></noscript>
     </section>
-    <section class="steps" id="how" aria-label="如何使用随传">
-      <div class="step"><span class="step-number">01</span><h2>两台电脑，打开随传</h2><p>用浏览器访问同一个网址。<br>不用安装，也不用注册。</p></div>
-      <div class="step"><span class="step-number">02</span><h2>输入连接码，确认配对</h2><p>使用 8 位连接码发起邀请。<br>对方确认后，成为常用设备。</p></div>
-      <div class="step"><span class="step-number">03</span><h2>以后，直接选设备发送</h2><p>配对关系长期保留。<br>下次打开，不必重新输入连接码。</p></div>
+    <section class="steps" id="why" aria-label="为什么选择随传">
+      <div class="step"><span class="step-number">01</span><h2>简单，打开网页就能用</h2><p>免安装、免注册，配对后即可发送。<br>配对一次，之后直接选在线设备。</p></div>
+      <div class="step"><span class="step-number">02</span><h2>极速，优先设备间直传</h2><p>优先 P2P 点对点传输，内容直达对方。<br>无需先存云盘，再让对方下载。</p></div>
+      <div class="step"><span class="step-number">03</span><h2>安全，只连你认可的设备</h2><p>新配对需对方确认，只向已配对设备发送。<br>直连失败才中转，服务器不留存传输内容。</p></div>
     </section>
     <section class="questions" id="questions" aria-labelledby="privacy-title">
-      <div class="privacy-intro"><h2 id="privacy-title">连上的，<br>都是你认可的设备。</h2><p>优先 P2P 点对点直传，无法直连时中转。<br>中转服务器只转发，不留存文件内容。</p></div>
+      <div class="privacy-intro"><h2 id="privacy-title">随手快传，<br>安心继续。</h2><p>连接哪些设备，由你决定。<br>配对长期保留，只有手动忘记才解除。</p></div>
       <div class="faq-list">
+        <details><summary>第一次使用，怎么传？</summary><p>两台电脑打开随传的传输页，输入对方的 8 位连接码，对方确认后即可完成配对。选择在线设备，粘贴文字、截图或添加文件，点击发送即可。双方需保持传输页打开。</p></details>
+        <details><summary>支持 Windows、Mac 和 Linux 之间互传吗？</summary><p>Windows 和 Mac 电脑可使用 Chrome 或 Edge 打开网页版，配对后互传文件、文字和截图。Linux 服务器和树莓派可安装 <a href="/downloads/xcopy/">xcopy 命令行客户端</a>，与浏览器双向传输文件和文字；接收内容保存到指定目录。双方均需在线。</p></details>
+        <details><summary>传输速度有多快？</summary><p>随传优先在两台设备之间通过 P2P 直传，无需先上传到云盘，再让对方下载。实际速度取决于双方网络、连接方式和文件大小；无法直连时会通过服务器中转。</p></details>
+        <details><summary>能一次发给多台设备吗？</summary><p>可以。选择「全部在线设备」即可群发，也可以选择一台设备单发。群发只发送给点击发送时，与本机直接配对且在线的设备。</p></details>
         <details><summary>连接码更新，还能继续传吗？</summary><p>可以。连接码只用于发起新配对，更新或过期不会解除已有配对。配对关系长期保留，只有手动忘记才会解除。忘记设备前，双方的传输任务需先结束。</p></details>
         <details><summary>重新打开浏览器，需要重新配对吗？</summary><p>同一浏览器配置、同一网址且站点数据保留时，一般不需要。换浏览器、换配置或清除站点数据后，需要重新配对。</p></details>
         <details><summary>内容会保存在哪里？</summary><p>文字、截图和文件优先通过 P2P 在两台设备之间点对点直传。无法直连时（例如打洞失败），才通过服务器中转；中转服务器只负责转发，不保存或留存任何文件内容。</p><p>收到的内容暂存在接收端当前页面中。刷新或关闭页面前，请保存需要的文件、复制需要的文字。</p><p>为记住已配对设备，服务端会保存设备信息和配对关系，但不保存传输内容。</p></details>
@@ -77,7 +92,7 @@
       </div>
     </section>
   </main>
-  <footer class="site-footer"><span>随传 · xcopy.werfamily.fun</span><span>随手一传，换台继续。</span></footer>
+  <footer class="site-footer"><span>随传 · xcopy.werfamily.fun</span><a href="https://xcopy.werfamily.fun/downloads/xcopy/">Linux / 树莓派命令行</a><span>简单 · 极速 · 安全快传</span></footer>
 </div>
 <template id="content-text">会议改到下午三点，<br>记得带上修改后的方案。</template>
 <template id="content-image"><div class="file-item"><span class="file-icon"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg></span><div><strong>刚刚的截图.png</strong><small>图片 · 428 KB</small></div></div></template>

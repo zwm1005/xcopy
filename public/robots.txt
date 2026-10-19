@@ -1,0 +1,6 @@
+User-agent: *
+Disallow: /ws
+Disallow: /healthz
+Disallow: /downloads/xcopy/v
+
+Sitemap: https://xcopy.werfamily.fun/sitemap.xml

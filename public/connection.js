@@ -1,12 +1,14 @@
 import { loadIdentity, signChallenge } from './identity.js';
+import { deviceNames } from './device-name.js';
 
 export class Connection extends EventTarget {
-  constructor() {
+  constructor({ guest = false } = {}) {
     super();
     this.pending = new Map();
     this.ready = false;
     this.attempt = 0;
     this.sessionId = null;
+    this.guest = guest;
   }
 
   emit(type, data) {
@@ -15,7 +17,9 @@ export class Connection extends EventTarget {
 
   async start() {
     try {
-      this.identity = await loadIdentity();
+      if (!this.guest) {
+        this.identity = await loadIdentity();
+      }
       this.connect();
     } catch (error) {
       this.emit('fatal', { message: error.message });
@@ -47,13 +51,24 @@ export class Connection extends EventTarget {
     });
     ws.addEventListener('open', async () => {
       try {
-        const name = localStorage.getItem('suichuan-name') || '我的电脑';
+        if (this.guest) {
+          const result = await this.rpc('guest.open', { resumeSession: this.sessionId, name: deviceNames.guest(), shareProtocol: 2 });
+          this.sessionId = result.sessionId;
+          this.device = result.device;
+          this.config = result.config;
+          this.ready = true;
+          this.attempt = 0;
+          this.emit('ready', result);
+          return;
+        }
+        const name = deviceNames.device();
         const { challenge, fingerprint } = await this.rpc('auth.begin', { publicKey: this.identity.publicKey, name });
         if (fingerprint !== this.identity.fingerprint) {
           throw new Error('设备身份不匹配');
         }
         const signature = await signChallenge(this.identity, challenge);
         const result = await this.rpc('auth.finish', { signature, resumeSession: this.sessionId });
+        deviceNames.rememberDevice(result.device.name);
         this.sessionId = result.sessionId;
         this.device = result.device;
         this.config = result.config;
@@ -82,7 +97,7 @@ export class Connection extends EventTarget {
 
   rpc(type, data = {}) {
     return new Promise((resolve, reject) => {
-      if (this.ws?.readyState !== WebSocket.OPEN || (!this.ready && !type.startsWith('auth.'))) {
+      if (this.ws?.readyState !== WebSocket.OPEN || (!this.ready && !type.startsWith('auth.') && type !== 'guest.open')) {
         reject(new Error('服务暂不可用，请等待重连'));
         return;
       }
