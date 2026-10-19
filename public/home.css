@@ -98,6 +98,7 @@ details[open] summary::after { content: "−"; }
 details p { padding: 13px 24px 3px 0; font-size: 12px; line-height: 1.8; color: var(--home-muted); }
 .site-footer { padding: 25px 48px; border-top: 1px solid var(--home-line); display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; font-size: 11px; color: var(--home-muted); }
 .site-footer span:last-child { text-align: right; }
+.locale-links { display: flex; gap: 12px; }
 @media (max-width: 800px) {
   .site-header { height: 76px; padding: 0 28px; }
   .site-header nav { gap: 18px; }

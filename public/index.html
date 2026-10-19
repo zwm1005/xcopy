@@ -4,9 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<meta name="description" content="XCopy transfers text, screenshots and files between paired devices. No installation or account required. P2P is preferred; relay servers forward content without storing it." data-i18n-content="page.xcopy.transfers.text.screenshots.and.files.between.paired">
-<title data-i18n="page.xcopy.files.text.and.screenshots.across.devices">XCopy - Files, text and screenshots across devices</title>
-<meta name="robots" content="index, follow">
+<meta name="description" content="Send files, text and screenshots between devices with XCopy. Free, open-source, no account required. WebRTC P2P, share links, and a Linux CLI." data-i18n-content="page.xcopy.transfers.text.screenshots.and.files.between.paired">
+<title data-i18n="page.xcopy.files.text.and.screenshots.across.devices">XCopy - Free, Open-Source File Transfer</title>
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="XCopy - Free, Open-Source File Transfer" data-i18n-content="page.xcopy.files.text.and.screenshots.across.devices">
+<meta name="twitter:description" content="Send files, text and screenshots between devices with XCopy. Free, open-source, no account required. WebRTC P2P, share links, and a Linux CLI." data-i18n-content="page.xcopy.transfers.text.screenshots.and.files.between.paired">
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="XCopy" data-i18n-content="page.xcopy">
@@ -38,7 +41,30 @@
   <header class="site-header">
     <a class="brand" href="/" aria-label="XCopy home" data-i18n-aria-label="page.xcopy.home"><svg class="brand-mark" viewBox="0 0 128 84" aria-hidden="true"><use href="/icon.svg?v=20261018-brand#mark"/></svg><span class="brand-name"><span data-i18n="page.xcopy.alt">XCopy</span><small>XCOPY</small></span></a>
     <nav aria-label="Home navigation" data-i18n-aria-label="page.home.navigation"><a class="quiet-link how-link" href="#why"><span data-i18n="page.why.xcopy">Why XCopy</span></a><a class="quiet-link faq-link" href="#questions"><span data-i18n="page.faq">FAQ</span></a><a class="button header-start" href="/transfer"><span data-i18n="page.open.xcopy">Open XCopy</span> <svg class="icon" aria-hidden="true"><use href="#i-up-right"/></svg></a></nav>
-  <label class="locale-picker"><span data-i18n="language.label">Language</span><select data-locale aria-label="Language"><option value="en">English</option><option value="zh-CN">简体中文</option></select></label></header>
+  <div class="site-tools"><label class="locale-picker"><span data-i18n="language.label">Language</span><select data-locale aria-label="Language"><option value="en">English</option><option value="zh-CN">简体中文</option></select></label>
+    <!-- GitHub mark: https://github.com/primer/octicons (MIT License)
+Copyright (c) 2026 GitHub Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+-->
+    <a class="github-link" href="https://github.com/zwm1005/xcopy" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.226 17.284c-2.965-.36-5.054-2.493-5.054-5.256 0-1.123.404-2.336 1.078-3.144-.292-.741-.247-2.314.09-2.965.898-.112 2.111.36 2.83 1.01.853-.269 1.752-.404 2.853-.404 1.1 0 1.999.135 2.807.382.696-.629 1.932-1.1 2.83-.988.315.606.36 2.179.067 2.942.72.854 1.101 2 1.101 3.167 0 2.763-2.089 4.852-5.098 5.234.763.494 1.28 1.572 1.28 2.807v2.336c0 .674.561 1.056 1.235.786 4.066-1.55 7.255-5.615 7.255-10.646C23.5 6.188 18.334 1 11.978 1 5.62 1 .5 6.188.5 12.545c0 4.986 3.167 9.12 7.435 10.669.606.225 1.19-.18 1.19-.786V20.63a2.9 2.9 0 0 1-1.078.224c-1.483 0-2.359-.808-2.987-2.313-.247-.607-.517-.966-1.034-1.033-.27-.023-.359-.135-.359-.27 0-.27.45-.471.898-.471.652 0 1.213.404 1.797 1.235.45.651.921.943 1.483.943.561 0 .92-.202 1.437-.719.382-.381.674-.718.944-.943"/></svg><span>GitHub</span></a>
+  </div></header>
   <main>
     <section class="hero" aria-labelledby="home-title">
       <p class="eyebrow"><span data-i18n="page.simple.fast.secure.transfers">Simple · Fast · Secure transfers</span></p>
@@ -91,7 +117,7 @@
       </div>
     </section>
   </main>
-  <footer class="site-footer"><span><span data-i18n="page.xcopy.alt.alt">XCopy</span></span><a data-cli-download hidden href="/downloads/xcopy/"><span data-i18n="page.linux.raspberry.pi.cli">Linux / Raspberry Pi CLI</span></a><span><span data-i18n="page.simple.fast.secure.transfers">Simple · Fast · Secure transfers</span></span></footer>
+  <footer class="site-footer"><span><span data-i18n="page.xcopy.alt.alt">XCopy</span></span><nav class="locale-links" aria-label="Language" data-i18n-aria-label="language.label"><a href="/?lang=en" lang="en" hreflang="en">English</a><a href="/?lang=zh-CN" lang="zh-CN" hreflang="zh-CN">简体中文</a></nav><a data-cli-download hidden href="/downloads/xcopy/"><span data-i18n="page.linux.raspberry.pi.cli">Linux / Raspberry Pi CLI</span></a><span><span data-i18n="page.simple.fast.secure.transfers">Simple · Fast · Secure transfers</span></span></footer>
 </div>
 <template id="content-text"><span data-i18n="page.the.meeting.moved.to.3.pm">The meeting moved to 3 PM.</span><br><span data-i18n="page.remember.to.bring.the.updated.proposal">Remember to bring the updated proposal.</span></template>
 <template id="content-image"><div class="file-item"><span class="file-icon"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg></span><div><strong><span data-i18n="page.screenshot.png">Screenshot.png</span></strong><small><span data-i18n="page.image.428.kb">Image · 428 KB</span></small></div></div></template>

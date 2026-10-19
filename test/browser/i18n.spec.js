@@ -62,17 +62,23 @@ test('English default overrides browser language while explicit choices, blocked
   }
 });
 
-test('initial HTML is English even before JavaScript initializes', async ({ browser, baseURL }) => {
+test('initial HTML contains the selected language and search metadata without JavaScript', async ({ browser, baseURL }) => {
   const context = await browser.newContext({ locale: 'zh-CN', javaScriptEnabled: false });
   const page = await context.newPage();
   try {
-    await page.goto(baseURL);
+    await page.goto(`${baseURL}/?lang=en`);
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
     await expect(page.getByRole('heading', { level: 1 })).toContainText('Copy here');
     await expect(page.locator('meta[property="og:locale"]')).toHaveAttribute('content', 'en_US');
     await expect(page.locator('[data-locale]')).toHaveValue('en');
+    await page.getByRole('link', { name: '简体中文', exact: true }).click();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('这边复制');
+    await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /免费开源/);
+    await expect(page.locator('[data-locale]')).toHaveValue('zh-CN');
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `${baseURL}/`);
     for (const path of ['/transfer', '/s']) {
-      await page.goto(`${baseURL}${path}`);
+      await page.goto(`${baseURL}${path}?lang=en`);
       await expect(page.locator('html')).toHaveAttribute('lang', 'en');
       await expect(page.locator('[data-locale]')).toHaveValue('en');
     }

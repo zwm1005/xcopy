@@ -61,12 +61,17 @@ export function setLocale(next: Locale, persist = true): void {
     select.value = locale;
   }
   document.querySelector('meta[property="og:locale"]')?.setAttribute('content', locale === 'en' ? 'en_US' : 'zh_CN');
+  const alternate = document.querySelector<HTMLLinkElement>(`link[rel="alternate"][hreflang="${locale}"]`);
+  if (alternate) {
+    document.querySelector('link[rel="canonical"]')?.setAttribute('href', alternate.href);
+    document.querySelector('meta[property="og:url"]')?.setAttribute('content', alternate.href);
+  }
   if (persist) {
     try {
       localStorage.setItem('suichuan-locale', locale);
     } catch { /* Private browsing may disable storage. */ }
     const url = new URL(location.href);
-    if (url.searchParams.has('lang')) {
+    if (url.searchParams.has('lang') || alternate) {
       url.searchParams.set('lang', locale);
       history.replaceState(history.state, '', url);
     }

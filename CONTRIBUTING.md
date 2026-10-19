@@ -128,3 +128,11 @@ docker compose -f compose.yaml -f compose.turn.yaml up -d --no-deps --force-recr
 - Node 提供 `/robots.txt`、`/sitemap.xml` 和 `/indexnow.txt`，支持 GET / HEAD，使用 `no-store`。站点地图依据 `PUBLIC_ORIGIN` 生成。
 - `INDEXNOW_KEY` 默认空，此时 `/indexnow.txt` 返回 404；配置值须为 8–128 位 ASCII 字母、数字或连字符。外部提交工具需携带 `keyLocation=<PUBLIC_ORIGIN>/indexnow.txt`，应用不会自动提交。
 - Nginx 必须将发现端点代理到 Node，不能沿用旧版本从 `current/public` 直接读取的规则。回滚到旧版时需同时恢复旧路由及发现文件；Caddy 默认代理全部路径。
+
+### 搜索引擎抓取
+
+首页按 `?lang=en` / `?lang=zh-CN` 在服务端返回完整文案，禁用 JavaScript 也能读取正文、标题和描述。无语言参数时使用 `DEFAULT_LOCALE`；默认语言的 canonical 为 `/`，另一语言保留查询参数。`sitemap.xml` 列出两种语言并提供相互对应的 `hreflang`，不列入设备传输或分享页面。页面内容对普通访问者及 Googlebot、Baiduspider、bingbot 一致。
+
+`robots.txt` 允许抓取首页、样式、脚本和站点地图，只排除 API、WebSocket 和健康检查路径。不要使用 `Disallow: /s`，它也会阻止 `/sitemap.xml`、`/styles.css` 等资源。发送页及分享页允许读取 `noindex`，但通过 HTML 元标签与 `X-Robots-Tag` 阻止收录。
+
+发布后可用 IndexNow 将两种语言的 canonical URL 提交给参与该协议的搜索引擎，携带当前 `/indexnow.txt` 的 key 和 `keyLocation`。HTTP 200/202 仅代表收到通知或等待验证，不代表已经收录。Google Search Console 与百度搜索资源平台仍需站点所有者完成验证后提交 `sitemap.xml`；不要使用已废弃的 sitemap ping 接口，也不要将普通网页提交到只面向特定内容类型的 Google Indexing API。

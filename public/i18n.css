@@ -1,9 +1,20 @@
 .locale-picker { display: inline-flex; align-items: center; gap: .4rem; font-size: .75rem; flex-shrink: 0; margin-inline-start: .6rem; }
 .locale-picker > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .locale-picker select { color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 6px; padding: .35rem; max-width: 100px; font: inherit; }
-html[lang="en"] .typewriter-text { animation: none; width: auto; white-space: normal; }
-html[lang="en"] .typewriter-line { white-space: normal; }
-html[lang="en"] .qt-intro h1 { font-size: clamp(24px, 4.5vw, 42px); }
+.site-tools { display: inline-flex; align-items: center; gap: 14px; margin-inline-start: auto; flex-shrink: 0; }
+.site-tools .locale-picker { margin-inline-start: 0; }
+.github-link { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; color: inherit; text-decoration: none; font-size: 12px; white-space: nowrap; }
+.github-link svg { width: 18px; height: 18px; fill: currentColor; }
+.github-link:hover { opacity: .7; }
+.github-link:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; border-radius: 4px; }
+/* Keep the shared reveal/cursor animations and fit English titles on one line. */
+html[lang="en"] #suichuan .qt-intro h1 { font-size: clamp(20px, 4.5vw, 29px); }
 html[lang="en"] .qt-button { white-space: normal; }
 [hidden] { display: none !important; }
 @media(max-width: 560px) { .qt-header, .site-header { flex-wrap: wrap; gap: 10px; } .locale-picker { margin-inline-start: auto; } html[lang="en"] .share-tabs button { min-width: 0; } }
+@media(max-width: 700px) {
+  .site-header, #suichuan .qt-header { flex-wrap: wrap; }
+  .site-header { height: auto; min-height: 76px; padding-top: 16px; padding-bottom: 16px; }
+  .site-header nav, #suichuan .qt-header-actions { order: 2; width: 100%; justify-content: flex-end; }
+  .site-tools { gap: 10px; }
+}

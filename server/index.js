@@ -1,5 +1,6 @@
 import { assets } from './assets.js';
 import { discovery, pageMetadata } from './discovery.js';
+import { pageLocale } from './page-html.js';
 import { messageDescriptor } from './messages.js';
 import { assertFrontend } from '../scripts/frontend-artifact.js';
 import { createServer } from 'node:http';
@@ -403,7 +404,13 @@ export function createApp(overrides = {}) {
     }
     try {
       const content = await readFile(resolve(publicDir, `.${file}`));
-      res.writeHead(200, { 'Content-Type': mimeTypes[extname(file)] || 'text/plain; charset=utf-8' }).end(req.method === 'HEAD' ? undefined : pageMetadata(content, file, config));
+      if (['/index.html', '/transfer.html'].includes(file)) {
+        res.setHeader('Content-Language', pageLocale(req.url, config));
+      }
+      if (['/transfer.html', '/share.html'].includes(file)) {
+        res.setHeader('X-Robots-Tag', file === '/share.html' ? 'noindex, nofollow' : 'noindex, follow');
+      }
+      res.writeHead(200, { 'Content-Type': mimeTypes[extname(file)] || 'text/plain; charset=utf-8' }).end(req.method === 'HEAD' ? undefined : pageMetadata(content, file, config, req.url));
     } catch {
       res.writeHead(500).end('Service unavailable');
     }
