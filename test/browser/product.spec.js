@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
 async function device(browser, baseURL, name, init) {
-  const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
+  const context = await browser.newContext({ locale: 'zh-CN', permissions: ['clipboard-read', 'clipboard-write'] });
   if (init) {
     await context.addInitScript(init);
   }

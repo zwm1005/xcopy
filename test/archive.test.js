@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { archive } from '../public/archive.js';
+import { archive } from '../dist/public/archive.js';
 
 test('ZIP stores UTF-8 names, empty files, duplicates and binary payloads with correct CRC', async () => {
   const blob = await archive([

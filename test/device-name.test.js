@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createDeviceNames, devicePlatform, validDeviceName } from '../public/device-name.js';
+import { createDeviceNames, devicePlatform, validDeviceName } from '../dist/public/device-name.js';
 
 test('platform names handle client hints, Android/Linux overlap and iPad desktop mode', () => {
   for (const [info, expected] of [

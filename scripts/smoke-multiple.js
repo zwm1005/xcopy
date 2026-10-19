@@ -23,7 +23,7 @@ const files = [
   { name: 'empty.txt', mimeType: 'text/plain', buffer: Buffer.alloc(0) }
 ];
 async function page() {
-  const context = await browser.newContext();
+  const context = await browser.newContext({ locale: 'zh-CN' });
   contexts.push(context);
   await context.addInitScript(({ relay }) => {
     window.shareRoutes = [];

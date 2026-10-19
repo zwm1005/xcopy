@@ -1,10 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rm, open } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { createHash } from 'node:crypto';
 import jsQR from 'jsqr';
 import { PNG } from 'pngjs';
 
 async function sender(browser, baseURL, files, mode = 'single') {
-  const context = await browser.newContext();
+  const context = await browser.newContext({ locale: 'zh-CN' });
   const page = await context.newPage();
   await page.goto(`${baseURL}/transfer`);
   await expect(page.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready');
@@ -12,6 +14,11 @@ async function sender(browser, baseURL, files, mode = 'single') {
   await expect(page.locator('[data-onboarding]')).toBeHidden();
   await expect(page.locator('.qt-transfers')).toBeHidden();
   await expect(page.getByText('还未选择文件', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('把文件分享出去', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('一个链接或二维码，对方打开就能接收。', { exact: true })).toHaveCount(0);
+  const picker = page.locator('[data-share-panel]').getByRole('button', { name: '添加附件', exact: true });
+  await expect(picker.locator('svg')).toBeVisible();
+  await expect(picker).toHaveText('');
   await page.locator('[data-files]').setInputFiles(files);
   const settings = page.locator('[data-share-settings]');
   await expect(settings).not.toHaveAttribute('open');
@@ -31,7 +38,7 @@ async function sender(browser, baseURL, files, mode = 'single') {
   return { context, page, url };
 }
 async function guest(browser, url, options = {}, init) {
-  const context = await browser.newContext(options);
+  const context = await browser.newContext({ locale: 'zh-CN', ...options });
   if (init) {
     await context.addInitScript(init);
   }
@@ -84,7 +91,7 @@ test('tabs keep the common heading in place and successful sharing consumes only
     };
   });
   await page.locator('[data-share-generate]').click();
-  await expect(page.locator('.qt-toast')).toHaveText('测试：创建暂时失败，请重试');
+  await expect(page.locator('.qt-toast')).toHaveText('操作未完成，请重试。');
   await expect(page.locator('.share-upload .qt-attachment-name')).toHaveText(files[0].name);
   await expect(page.locator('[data-share-generate]')).toBeEnabled();
   await page.locator('[data-share-generate]').click();
@@ -92,9 +99,9 @@ test('tabs keep the common heading in place and successful sharing consumes only
   await page.getByRole('tab', { name: '发送给设备', exact: true }).click();
   const nextFile = { name: '稍后发送.txt', mimeType: 'text/plain', buffer: Buffer.from('保留后来选择的文件') };
   await page.locator('[data-files]').setInputFiles([nextFile]);
-  await expect(page.locator('.qt-attachment-name')).toHaveCount(2);
+  await expect(page.locator('[data-attachments] .qt-attachment-name')).toHaveCount(2);
   await page.evaluate(() => window.releaseShareCreate());
-  await expect(page.locator('.qt-attachment-name')).toHaveText(nextFile.name);
+  await expect(page.locator('[data-attachments] .qt-attachment-name')).toHaveText([nextFile.name]);
   await page.getByRole('button', { name: `移除 ${nextFile.name}`, exact: true }).click();
   await expect(page.locator('[data-attachments]')).toBeHidden();
   await page.getByRole('tab', { name: '链接分享', exact: true }).click();
@@ -152,7 +159,7 @@ test('one-time multi-file share: QR, preview, atomic claim, verified bytes, ZIP 
   const archive = await readFile(await zip.path());
   expect(archive.readUInt32LE(0)).toBe(0x04034b50);
   expect(archive.readUInt16LE(archive.length - 12)).toBe(8);
-  const extra = await browser.newContext();
+  const extra = await browser.newContext({ locale: 'zh-CN' });
   const again = await extra.newPage();
   await again.goto(s.url);
   await expect(again.getByRole('heading', { level: 1 })).toHaveText('这份分享已被领取');
@@ -307,28 +314,72 @@ test('claim notification loss recovers from the state snapshot and finished shar
   await expect(s.page.locator('[data-share-generate]')).toBeVisible();
   await expect(s.page.locator('.qt-transfers')).toBeHidden();
   await s.page.getByRole('tab', { name: '发送给设备', exact: true }).click();
-  await expect(s.page.getByRole('region', { name: '本次传输', exact: true })).toBeVisible();
-  await expect(s.page.getByText('发出的内容和收到的内容会出现在这里', { exact: true })).toBeVisible();
-  await expect(s.page.locator('.qt-history-footer > span')).toBeVisible();
+  await expect(s.page.locator('.qt-transfers')).toBeHidden();
+  await expect(s.page.getByText('发出的内容和收到的内容会出现在这里', { exact: true })).toHaveCount(0);
+  await expect(s.page.locator('.qt-history-footer > span')).toBeHidden();
   await s.page.getByRole('tab', { name: '链接分享', exact: true }).click();
   await expect(s.page.locator('.qt-transfers')).toBeHidden();
   await Promise.all([s.context.close(), a.context.close()]);
 });
 
-test('share transfers the default 50 MiB boundary without changing file bytes', async ({ browser, baseURL }, testInfo) => {
-  const content = Buffer.alloc(50 * 1048576, 39);
+test('P2P sharing transfers 257 MiB beyond all previous file, bundle and receive limits', async ({ browser, baseURL }, testInfo) => {
+  test.setTimeout(300000);
   await mkdir(testInfo.outputDir, { recursive: true });
-  const path = testInfo.outputPath('50MiB.bin');
-  await writeFile(path, content);
+  const path = testInfo.outputPath('257MiB.bin');
+  const content = Buffer.alloc(1048576, 39);
+  const expected = createHash('sha256');
+  const file = await open(path, 'w');
+  try {
+    for (let i = 0; i < 257; i += 1) {
+      await file.write(content);
+      expected.update(content);
+    }
+  } finally {
+    await file.close();
+  }
   const s = await sender(browser, baseURL, [path]);
   const a = await guest(browser, s.url);
-  await a.page.locator('[data-claim]').click();
-  await expect(a.page.getByRole('heading', { level: 1 })).toHaveText('全部文件接收完成', { timeout: 60000 });
-  const event = a.page.waitForEvent('download');
-  await a.page.locator('[data-save-index="0"]').click();
-  expect(await readFile(await (await event).path())).toEqual(content);
-  await rm(path);
-  await Promise.all([s.context.close(), a.context.close()]);
+  try {
+    await a.page.locator('[data-claim]').click();
+    await expect(a.page.getByRole('heading', { level: 1 })).toHaveText('全部文件接收完成', { timeout: 270000 });
+    const event = a.page.waitForEvent('download');
+    await a.page.locator('[data-save-index="0"]').click();
+    const actual = createHash('sha256');
+    for await (const chunk of createReadStream(await (await event).path())) {
+      actual.update(chunk);
+    }
+    expect(actual.digest('hex')).toBe(expected.digest('hex'));
+  } finally {
+    await rm(path);
+    await Promise.all([s.context.close(), a.context.close()]);
+  }
+});
+
+test('forced TURN rejects files above 50 MiB with a clear reason and no file payload', async ({ browser, baseURL }, testInfo) => {
+  test.skip(process.env.FORCE_RELAY !== '1', '需要本机 TURN 测试环境');
+  await mkdir(testInfo.outputDir, { recursive: true });
+  const path = testInfo.outputPath('over-relay-limit.bin');
+  const file = await open(path, 'w');
+  await file.truncate(50 * 1048576 + 1);
+  await file.close();
+  const s = await sender(browser, baseURL, [path]);
+  const a = await guest(browser, s.url);
+  try {
+    await s.page.evaluate(async () => {
+      const { Transfers } = await import('/transfer.js');
+      window.sentFileBytes = 0;
+      Transfers.prototype.sendBytes = async function () { window.sentFileBytes += 1; };
+    });
+    await a.page.locator('[data-claim]').click();
+    await expect(a.page.getByRole('alert')).toContainText('服务器中转单个文件不能超过 50 MB');
+    await expect(s.page.locator('[data-share-panel]')).toContainText('服务器中转单个文件不能超过 50 MB');
+    expect(await s.page.evaluate(() => window.sentFileBytes)).toBe(0);
+    await expect(a.page.locator('[data-save-index]')).toHaveCount(0);
+    await a.page.screenshot({ path: testInfo.outputPath('中转超限提示.png'), fullPage: true });
+  } finally {
+    await rm(path);
+    await Promise.all([s.context.close(), a.context.close()]);
+  }
 });
 
 test('completed sharing becomes a compact result; history details stay inline while creating another share', async ({ browser, baseURL }, testInfo) => {

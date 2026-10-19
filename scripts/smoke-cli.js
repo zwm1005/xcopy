@@ -1,3 +1,4 @@
+import { assertFrontend } from './frontend-artifact.js';
 import { chromium, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -8,6 +9,9 @@ import { createHash } from 'node:crypto';
 // With XCOPY_REMOTE, use an already initialized daemon on that SSH target.
 // Otherwise start an isolated local server and CLI daemon; no user identity is touched.
 const remote = process.env.XCOPY_REMOTE;
+if (!remote) {
+  await assertFrontend({ fresh: true });
+}
 const remoteBin = process.env.XCOPY_REMOTE_BIN || '/home/haha/.local/bin/xcopy';
 const sshArgs = JSON.parse(process.env.XCOPY_SSH_ARGS || '["-o","BatchMode=yes","-o","StrictHostKeyChecking=yes","-o","ConnectTimeout=8"]');
 const arch = process.arch === 'x64' ? 'amd64' : process.arch;
@@ -84,7 +88,7 @@ try {
   await online();
   const before = await cli(['status']);
   browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--no-proxy-server'] });
-  const context = await browser.newContext();
+  const context = await browser.newContext({ locale: 'zh-CN' });
   await context.addInitScript(({ relay }) => {
     const PC = window.RTCPeerConnection;
     window.__xcopyIceErrors = [];

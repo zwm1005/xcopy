@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 
 async function device(browser, baseURL, name) {
-  const context = await browser.newContext();
+  const context = await browser.newContext({ locale: 'zh-CN' });
   const page = await context.newPage();
   await page.goto(new URL('/transfer', baseURL).href);
   await expect(page.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready');
@@ -51,7 +51,7 @@ try {
     // The hook runs before application startup in each isolated browser instance.
     const proxy = {
       async newContext() {
-        const context = await browser.newContext();
+        const context = await browser.newContext({ locale: 'zh-CN' });
         if (forceRelay) {
           await context.addInitScript(() => {
             const RTC = window.RTCPeerConnection;

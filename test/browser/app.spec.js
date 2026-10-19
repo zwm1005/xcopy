@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
 
 async function device(browser, baseURL, name) {
-  const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
+  const context = await browser.newContext({ locale: 'zh-CN', permissions: ['clipboard-read', 'clipboard-write'] });
   const page = await context.newPage();
   await page.goto(new URL('/transfer', baseURL).href);
   await expect(page.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready');
@@ -87,7 +87,7 @@ test('three-device pairing, real text/files/screenshots, refresh identity, revoc
       { name: '测试文件.bin', mimeType: 'application/octet-stream', buffer: file },
       { name: '截图.png', mimeType: 'image/png', buffer: png }
     ]);
-    await expect(a.page.locator('.qt-attachment-preview')).toHaveCount(1);
+    await expect(a.page.locator('.qt-composer .qt-attachment-preview')).toHaveCount(1);
     await a.page.locator('[data-action="send"]').click();
     await expect(received).toHaveCount(3);
     const fileRow = b.page.locator('[data-transfer]').filter({ hasText: '测试文件.bin' });
@@ -112,7 +112,7 @@ test('three-device pairing, real text/files/screenshots, refresh identity, revoc
     expect(imageClipboard).toBe(true);
     await a.page.locator('[data-editor]').focus();
     await a.page.keyboard.press(process.platform === 'darwin' ? 'Meta+V' : 'Control+V');
-    await expect(a.page.locator('.qt-attachment-preview')).toHaveCount(1);
+    await expect(a.page.locator('.qt-composer .qt-attachment-preview')).toHaveCount(1);
     await a.page.locator('[data-action="send"]').click();
     await expect(received).toHaveCount(4);
 

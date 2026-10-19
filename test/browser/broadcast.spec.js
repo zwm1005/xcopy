@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
 async function device(browser, baseURL, name) {
-  const context = await browser.newContext();
+  const context = await browser.newContext({ locale: 'zh-CN' });
   const page = await context.newPage();
   await page.goto(new URL('/transfer', baseURL).href);
   await expect(page.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready');

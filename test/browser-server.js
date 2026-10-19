@@ -1,3 +1,5 @@
+import { assertFrontend } from '../scripts/frontend-artifact.js';
+await assertFrontend({ fresh: true });
 import { readFileSync } from 'node:fs';
 import { createApp } from '../server/index.js';
 

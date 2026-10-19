@@ -5,6 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
 
+const authMode = process.env.TEST_TURN_AUTH_MODE || 'shared-secret';
+const transport = process.env.TEST_TURN_TRANSPORT || 'both';
+if (!['shared-secret', 'static'].includes(authMode) || !['both', 'udp', 'tcp'].includes(transport)) {
+  throw new Error('Invalid local TURN test mode or transport');
+}
 const dir = await mkdtemp(join(tmpdir(), 'suichuan-turn-'));
 const secret = randomBytes(32).toString('hex');
 const port = process.env.TEST_TURN_PORT || '34799';
@@ -13,7 +18,7 @@ const limits = await readFile(new URL('../deploy/turn-limits.conf', import.meta.
 await writeFile(config, [
   `listening-port=${port}`, 'listening-ip=127.0.0.1', 'relay-ip=127.0.0.1',
   limits, 'realm=suichuan-test',
-  'use-auth-secret', `static-auth-secret=${secret}`, 'allow-loopback-peers',
+  ...(authMode === 'static' ? ['lt-cred-mech', `user=local-test:${secret}`] : ['use-auth-secret', `static-auth-secret=${secret}`]), 'allow-loopback-peers',
   'no-multicast-peers', 'no-cli', 'no-tls', 'no-dtls',
   `pidfile=${join(dir, 'turn.pid')}`, 'log-file=stdout', 'simple-log', 'no-stdout-log'
 ].join('\n'), { mode: 0o600 });
@@ -25,8 +30,8 @@ try {
   if (turnError || turn.exitCode !== null) {
     throw new Error('本机 TURN 启动失败，请安装 coturn，或用 TURNSERVER_BIN 指定 turnserver');
   }
-  const child = spawn(process.execPath, ['node_modules/@playwright/test/cli.js', 'test', '--grep', 'forced TURN'], {
-    stdio: 'inherit', env: { ...process.env, E2E_PORT: '8789', FORCE_RELAY: '1', TURN_URLS: `turn:127.0.0.1:${port}?transport=udp,turn:127.0.0.1:${port}?transport=tcp`, TURN_SECRET: secret }
+  const child = spawn(process.execPath, ['node_modules/@playwright/test/cli.js', 'test', '--output', `test-results/relay-${authMode}-${transport}`, '--grep', 'forced TURN'], {
+    stdio: 'inherit', env: { ...process.env, E2E_PORT: '8789', FORCE_RELAY: '1', TURN_URLS: (transport === 'both' ? ['udp', 'tcp'] : [transport]).map(value => `turn:127.0.0.1:${port}?transport=${value}`).join(','), TURN_AUTH_MODE: authMode, TURN_SECRET: authMode === 'shared-secret' ? secret : '', TURN_USERNAME: authMode === 'static' ? 'local-test' : '', TURN_PASSWORD: authMode === 'static' ? secret : '' }
   });
   const [code] = await once(child, 'exit');
   process.exitCode = code ?? 1;

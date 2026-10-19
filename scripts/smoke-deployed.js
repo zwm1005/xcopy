@@ -15,7 +15,7 @@ let sender;
 let recipient;
 
 async function device(name) {
-  const context = await browser.newContext();
+  const context = await browser.newContext({ locale: 'zh-CN' });
   contexts.push(context);
   await context.addInitScript(({ relay }) => {
     const PeerConnection = window.RTCPeerConnection;

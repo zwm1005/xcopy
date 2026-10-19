@@ -33,7 +33,7 @@ async function openPage(context) {
 }
 
 async function device(name) {
-  const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
+  const context = await browser.newContext({ locale: 'zh-CN', permissions: ['clipboard-read', 'clipboard-write'] });
   const entry = { context };
   devices.push(entry);
   entry.page = await openPage(context);
@@ -140,7 +140,7 @@ try {
     await sendText(b.page, a.page, '接收端反向发送确认');
   });
   await step('首次引导、一次性命名、空白校验和 320px 窄屏', async () => {
-    const context = await browser.newContext();
+    const context = await browser.newContext({ locale: 'zh-CN' });
     const entry = { context, page: await openPage(context) };
     devices.push(entry);
     const page = entry.page;

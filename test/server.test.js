@@ -196,6 +196,48 @@ test('share creation retries recover the same link without reserving a second sh
   assert.equal((await sender.rpc('share.list')).shares.length, 1);
 });
 
+test('direct files have no fixed size cap; TURN credentials and relay candidates are excluded above the relay boundary', async (t) => {
+  const { connect } = await setup(t, { stunUrls: ['stun:stun.example:3478'], turnUrls: ['turn:turn.example:3478'], turnSecret: 'a'.repeat(32) });
+  const a = await connect('发送者');
+  const b = await connect('接收者');
+  await pair(a, b);
+  const relay = 'candidate:1 1 udp 1 192.0.2.1 50000 typ relay raddr 0.0.0.0 rport 0';
+  const host = 'candidate:2 1 udp 2 192.0.2.2 50001 typ host';
+  for (const size of [50 * 1048576, 50 * 1048576 + 1, 5 * 1024 ** 3]) {
+    const directOnly = size > 50 * 1048576;
+    const started = await a.rpc('transfer.start', { peerId: b.id, metadata: { ...metadata, size } });
+    const offer = await b.event('transfer.offer', (value) => value.id === started.id);
+    for (const value of [started, offer]) {
+      assert.equal(value.directOnly, directOnly);
+      assert.equal(value.maxRelayFileBytes, 50 * 1048576);
+      assert.equal(value.iceServers.some((server) => server.urls.some((url) => url.startsWith('turn:'))), !directOnly);
+    }
+    await b.rpc('transfer.accept', { id: started.id });
+    await a.rpc('signal', { id: started.id, signal: { description: { type: 'offer', sdp: `v=0\r\na=${relay}\r\na=${host}\r\n` } } });
+    const signalled = await b.event('signal', (value) => value.id === started.id);
+    assert.equal(signalled.signal.description.sdp.includes('typ relay'), !directOnly);
+    await a.rpc('signal', { id: started.id, signal: { candidate: { candidate: relay } } });
+    await a.rpc('signal', { id: started.id, signal: { candidate: { candidate: host } } });
+    const candidate = await b.event('signal', (value) => value.id === started.id);
+    assert.equal(candidate.signal.candidate.candidate, directOnly ? host : relay);
+    await a.rpc('transfer.end', { id: started.id, status: 'failed', reasonCode: 'RELAY_SIZE_LIMIT' });
+    const state = await b.event('transfer.state', (value) => value.id === started.id);
+    assert.equal(state.reason.includes('50 MB'), directOnly);
+  }
+  const share = await a.rpc('share.create', { files: [{ ...metadata, size: 5 * 1024 ** 3 }, ...Array(4).fill({ ...metadata, size: 50 * 1048576 })], minutes: 10 });
+  assert.equal(share.totalBytes, 5 * 1024 ** 3 + 200 * 1048576);
+  const recipient = await guest(connect);
+  await recipient.rpc('share.claim', { token: share.token });
+  const large = await a.rpc('share.file.start', { id: share.id, index: 0 });
+  assert.equal(large.directOnly, true);
+  assert.equal(large.iceServers.length, 1);
+  await a.rpc('transfer.end', { id: large.id, status: 'failed', reasonCode: 'RELAY_SIZE_LIMIT' });
+  assert.match((await recipient.rpc('share.inspect', { token: share.token })).myClaim.reason, /50 MB/);
+  const small = await a.rpc('share.file.start', { id: share.id, index: 1 });
+  assert.equal(small.directOnly, false);
+  assert.equal(small.iceServers.length, 2);
+});
+
 test('share cancellation, expiry and metadata limits are enforced on the server', async (t) => {
   let time = Date.now();
   const { connect, app } = await setup(t, { now: () => time });
@@ -612,4 +654,37 @@ test('multiple history remains bounded and a pruned recipient retains an idempot
   assert.equal(record.claims.length, 50);
   assert.equal((await first.rpc('share.claim', { token: s.token })).myClaim.state, 'completed');
   assert.equal((await sender.rpc('share.list')).shares[0].counts.completed, 55);
+});
+
+test('static and shared-secret credentials use the same authorized ICE path for devices and guests', async (t) => {
+  for (const mode of ['static', 'shared-secret']) {
+    await t.test(mode, async (t) => {
+      const time = 1700000000000;
+      const secret = 's'.repeat(32);
+      const { connect } = await setup(t, { now: () => time, turnAuthMode: mode, turnSecret: secret, turnUsername: 'local-test-user', turnPassword: 'local-test-password', turnCredentialTtlSeconds: 7200, stunUrls: ['stun:stun.example:3478'], turnUrls: ['turns:relay.example:5349?transport=tcp'], forceRelay: true });
+      const a = await connect('A');
+      const b = await connect('B');
+      await pair(a, b);
+      const started = await a.rpc('transfer.start', { peerId: b.id, metadata });
+      const offer = await b.event('transfer.offer');
+      const share = await a.rpc('share.create', { files: [metadata], minutes: 10 });
+      const recipient = await guest(connect);
+      await recipient.rpc('share.claim', { token: share.token });
+      const sharing = await a.rpc('share.file.start', { id: share.id, index: 0 });
+      const guestOffer = await recipient.event('transfer.offer');
+      for (const result of [started, offer, sharing, guestOffer]) {
+        assert.equal(result.forceRelay, true);
+        assert.deepEqual(result.iceServers[0].urls, ['stun:stun.example:3478']);
+        const turn = result.iceServers[1];
+        assert.deepEqual(turn.urls, ['turns:relay.example:5349?transport=tcp']);
+        if (mode === 'static') {
+          assert.equal(turn.username, 'local-test-user');
+          assert.equal(turn.credential, 'local-test-password');
+        } else {
+          assert.equal(Number(turn.username.split(':')[0]), Math.floor(time / 1000) + 7200);
+          assert.equal(turn.credential, createHmac('sha1', secret).update(turn.username).digest('base64'));
+        }
+      }
+    });
+  }
 });
