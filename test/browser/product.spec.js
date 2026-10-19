@@ -294,11 +294,23 @@ test('多个页面显示实际接收位置，关闭接收页后后续内容转�
     await second.goto(new URL('/transfer', baseURL).href);
     await expect(b.page.locator('[data-reception-note]')).toContainText('本页负责接收新内容');
     await expect(second.locator('[data-reception-note]')).toContainText('本机另一个随传页面接收');
+    for (const page of [b.page, second]) {
+      await expect(page.locator('.qt-transfers')).toBeHidden();
+      await expect(page.locator('[data-reception-note]')).toBeVisible();
+    }
+    await second.locator('[data-locale]').selectOption('en');
+    await expect(second.locator('[data-reception-note]')).toContainText('Another XCopy tab on this device receives new');
+    await expect(second.locator('[data-reception-note]')).toBeVisible();
+    await second.locator('[data-locale]').selectOption('zh-CN');
+    await expect(second.locator('[data-reception-note]')).toContainText('本机另一个随传页面接收');
     await second.screenshot({ path: testInfo.outputPath('另一页面接收提示.png'), fullPage: true });
     await a.page.getByRole('textbox', { name: '要发送的文字' }).fill('第一条只收到首个页面');
     await a.page.locator('[data-action="send"]').click();
     await expect(b.page.locator('[data-status="completed"] pre')).toHaveText('第一条只收到首个页面');
     await expect(second.locator('[data-transfer]')).toHaveCount(0);
+    await expect(b.page.locator('.qt-transfers')).toBeVisible();
+    await expect(second.locator('.qt-transfers')).toBeHidden();
+    await expect(second.locator('[data-reception-note]')).toBeVisible();
     await expect(b.page).toHaveTitle('随传 · 跨设备快传');
     await b.page.close();
     await expect(second.locator('[data-reception-note]')).toBeHidden();
