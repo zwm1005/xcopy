@@ -34,13 +34,13 @@ test('crawlers receive complete bilingual HTML, canonical URLs and reciprocal si
             if (locale === 'zh-CN') {
               assert.match(html, /<title[^>]*>随传 XCopy - 免费开源/);
               assert.match(html, /<meta name="description" content="随传 XCopy/);
-              assert.match(html, /<span data-i18n="page.copy.here">这边复制，<\/span>/);
+              assert.match(html, /<span data-i18n="home.hero.title.devices">多端互传<\/span>/);
               assert.match(html, /<summary><span[^>]*>第一次使用，怎么传？/);
               assert.match(html, /aria-label="首页导航"/);
               assert.match(html, /<meta property="og:locale" content="zh_CN">/);
             } else {
               assert.match(html, /<title[^>]*>XCopy - Free, Open-Source File Transfer/);
-              assert.match(html, /<span data-i18n="page.copy.here">Copy here\.<\/span>/);
+              assert.match(html, /<span data-i18n="home.hero.title.devices">Cross-device transfers\.<\/span>/);
               assert.match(html, /<meta property="og:locale" content="en_US">/);
             }
             const schema = JSON.parse(html.match(/<script type="application\/ld\+json">([^<]+)<\/script>/)[1]);

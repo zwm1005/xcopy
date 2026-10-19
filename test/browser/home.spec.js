@@ -4,7 +4,7 @@ test('home opens the existing transfer page without registering a device during 
   const sockets = [];
   page.on('websocket', socket => sockets.push(socket.url()));
   await page.goto('/');
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('这边复制');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('多端互传');
   expect(sockets).toEqual([]);
   expect(await page.evaluate(() => indexedDB.databases())).toEqual([]);
   await page.getByRole('link', { name: '开始传输', exact: true }).click();
@@ -78,8 +78,8 @@ test('offscreen demos stop cycling and resume when visible', async ({ page }) =>
   await expect(page.getByRole('tab', { name: '文字', exact: true })).toHaveAttribute('aria-selected', 'true');
   await page.clock.runFor(2500);
   await expect(demo.locator('[data-received]')).toBeVisible();
-  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
-  await expect.poll(() => demo.evaluate(el => el.getBoundingClientRect().top >= innerHeight)).toBe(true);
+  await demo.evaluate(el => window.scrollTo({ top: scrollY + el.getBoundingClientRect().bottom + 1, behavior: 'instant' }));
+  await expect.poll(() => demo.evaluate(el => el.getBoundingClientRect().bottom <= 0)).toBe(true);
   await page.clock.runFor(18000);
   await expect(page.getByRole('tab', { name: '文字', exact: true })).toHaveAttribute('aria-selected', 'true');
   await demo.scrollIntoViewIfNeeded();

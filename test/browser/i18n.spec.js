@@ -68,12 +68,12 @@ test('initial HTML contains the selected language and search metadata without Ja
   try {
     await page.goto(`${baseURL}/?lang=en`);
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-    await expect(page.getByRole('heading', { level: 1 })).toContainText('Copy here');
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('Cross-device transfers');
     await expect(page.locator('meta[property="og:locale"]')).toHaveAttribute('content', 'en_US');
     await expect(page.locator('[data-locale]')).toHaveValue('en');
     await page.getByRole('link', { name: '简体中文', exact: true }).click();
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
-    await expect(page.getByRole('heading', { level: 1 })).toContainText('这边复制');
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('多端互传');
     await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /免费开源/);
     await expect(page.locator('[data-locale]')).toHaveValue('zh-CN');
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `${baseURL}/`);

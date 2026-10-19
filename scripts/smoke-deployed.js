@@ -34,7 +34,7 @@ async function device(name) {
   }, { relay: forceRelay });
   const page = await context.newPage();
   await page.goto(origin);
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('这边复制');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('多端互传');
   await page.getByRole('link', { name: '开始传输', exact: true }).click();
   await expect(page).toHaveURL(`${origin}/transfer`);
   await expect(page.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready', { timeout: 20000 });

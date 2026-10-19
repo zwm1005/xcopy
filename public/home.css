@@ -36,8 +36,8 @@ button:disabled { cursor: default; }
 .header-start .icon { width: 15px; height: 15px; }
 .hero { text-align: center; padding: 46px 28px 33px; }
 .eyebrow { font-size: 12px; letter-spacing: .12em; color: var(--home-muted); }
-.hero h1 { font-size: clamp(38px, 5.1vw, 58px); font-weight: 550; letter-spacing: -.055em; line-height: 1.18; margin: 19px 0 23px; }
-.hero-description { color: var(--home-muted); line-height: 1.85; }
+.hero h1 { display: flex; flex-wrap: wrap; justify-content: center; column-gap: .4em; font-size: clamp(40px, 5.5vw, 64px); font-weight: 700; letter-spacing: -.04em; line-height: 1.25; margin: 19px 0 23px; }
+.hero-description { max-width: 680px; margin-inline: auto; font-size: 16px; color: var(--home-muted); line-height: 1.85; text-wrap: balance; }
 .hero-actions { margin: 27px 0 16px; display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; }
 .hero-note { font-size: 12px; color: var(--home-muted); }
 .demo { margin: 0 48px; padding: 24px 28px 18px; background: var(--home-paper); border-radius: 12px; scroll-margin-top: 24px; }
@@ -121,7 +121,7 @@ details p { padding: 13px 24px 3px 0; font-size: 12px; line-height: 1.8; color: 
   .header-start { min-height: 38px; padding: 9px 11px; font-size: 11px; }
   .hero { padding: 35px 22px 29px; }
   .hero h1 { font-size: 40px; margin: 17px 0 20px; }
-  .hero-description { font-size: 12px; }
+  .hero-description { font-size: 14px; }
   .hero-actions { margin: 25px 0 14px; gap: 10px; }
   .hero-actions .button { padding: 12px 18px; font-size: 12px; }
   .hero-note { font-size: 11px; }
@@ -162,7 +162,9 @@ details p { padding: 13px 24px 3px 0; font-size: 12px; line-height: 1.8; color: 
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 
-/* Five full-width characters per line; keep the complete title visible for 10 seconds per cycle. */
+html[lang="en"] .hero h1 { font-size: clamp(25px, 4.8vw, 52px); }
+
+/* Reveal each headline phrase, then keep the complete title visible for 10 seconds. */
 .typewriter-line { display: inline-block; position: relative; vertical-align: top; white-space: nowrap; }
 .typewriter-text { display: block; animation: typewriter-single-reveal 10950ms linear infinite; }
 .typewriter-cursor { position: absolute; top: 0; left: 0; margin-left: .04em; font-weight: 400; pointer-events: none; user-select: none; animation: typewriter-single-position 10950ms linear infinite, typewriter-blink 1s step-end infinite; }
