@@ -299,6 +299,14 @@ export function createShares({ config, now, requireThat, rate, rateStart, rateLi
         t.receiver = ws;
       }
     }
+    // Transfers may finish while the sender's signaling connection is offline.
+    // Resume its queue after rebinding tasks, independently of paginated reads.
+    for (const s of index?.items.values() || []) {
+      check(s);
+      if (schedule(s)) {
+        publish(s);
+      }
+    }
   }
 
   function handle(ws, type, data) {
