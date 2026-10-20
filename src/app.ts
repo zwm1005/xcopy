@@ -101,7 +101,7 @@ function updateLeaveGuard() {
         leaveGuardInstalled = needed;
     }
     const note = get<HTMLElement>('[data-unsaved-note]');
-    note.hidden = unsaved === 0;
+    note.hidden = unsaved === 0 || shareUI?.mode === 'share';
     note.textContent = unsaved ? t("app.files.still.need.saving.refreshing.closing.or.clearing", { p0: unsaved }) : '';
 }
 function renderReception(reception?: Reception) {
@@ -198,8 +198,11 @@ function renderTransfers() {
     const focusId = focused?.dataset.id;
     list.replaceChildren();
     const activeGroups = new Set(transfers.items.filter((item) => item.groupId && isActive(item)).map((item) => item.groupId));
-    const count = transfers.items.filter((item) => !item.groupId && !item.shareId).length + transfers.groups.length + (shareUI?.entries.length || 0);
     const sharing = shareUI?.mode === 'share';
+    const shares = shareUI?.entries || [];
+    const count = sharing ? shares.length : transfers.items.filter((item) => !item.groupId && !item.shareId).length + transfers.groups.length;
+    list.hidden = sharing;
+    get<HTMLElement>('[data-share-records]').hidden = !sharing;
     const history = get<HTMLElement>('.qt-transfers');
     const title = t("app.history");
     history.hidden = count === 0;
@@ -209,7 +212,10 @@ function renderTransfers() {
         heading.textContent = `${title} `;
     }
     get<HTMLElement>('[data-count]').textContent = count ? String(count) : '';
-    get<HTMLButtonElement>('[data-action="clear"]').hidden = !transfers.items.some((item) => !item.shareId && !isActive(item) && !activeGroups.has(item.groupId)) && !shareUI?.entries.some((s) => ['completed', 'cancelled', 'expired', 'unavailable', 'stopped'].includes(s.status));
+    const canClear = sharing
+        ? shares.some((s) => ['completed', 'cancelled', 'expired', 'unavailable', 'stopped'].includes(s.status))
+        : transfers.items.some((item) => !item.shareId && !isActive(item) && !activeGroups.has(item.groupId));
+    get<HTMLButtonElement>('[data-action="clear"]').hidden = !canClear;
     get<HTMLElement>('.qt-history-footer > span').hidden = sharing;
     get<HTMLElement>('.qt-history-footer').hidden = sharing && get<HTMLButtonElement>('[data-action="clear"]').hidden;
     const shown = new Set<string>();
@@ -767,13 +773,18 @@ async function action(name: string, el: {
             break;
         }
         case 'clear':
-            if (transfers.items.some(needsSaving) && !window.confirm(t("app.some.files.are.not.saved.clearing.will.discard"))) {
-                break;
+            if (shareUI?.mode === 'share') {
+                transfers.clear((item) => Boolean(item.shareId));
+                shareUI.clear();
             }
-            transfers.clear();
-            shareUI?.clear();
-            updateLeaveGuard();
-            state.expandedGroups = new Set([...state.expandedGroups].filter((id) => transfers.groups.some((entry) => entry.id === id)));
+            else {
+                if (transfers.items.some(needsSaving) && !window.confirm(t("app.some.files.are.not.saved.clearing.will.discard"))) {
+                    break;
+                }
+                transfers.clear((item) => !item.shareId);
+                state.expandedGroups = new Set([...state.expandedGroups].filter((id) => transfers.groups.some((entry) => entry.id === id)));
+            }
+            renderTransfers();
             break;
     }
 }
