@@ -1,5 +1,6 @@
 import { isIP } from 'node:net';
 import { resolve } from 'node:path';
+import { trustedNetworks } from './client-source.js';
 
 function number(env, key, fallback, min, max) {
   const value = Number(env[key] ?? fallback);
@@ -10,6 +11,12 @@ function number(env, key, fallback, min, max) {
 }
 
 export function loadConfig(env = process.env) {
+  const trustProxy = boolean(env, 'TRUST_PROXY');
+  const trustedProxyCidrs = (env.TRUSTED_PROXY_CIDRS || '').split(',').map((value) => value.trim()).filter(Boolean);
+  trustedNetworks(trustedProxyCidrs);
+  if (trustProxy && !trustedProxyCidrs.length) {
+    throw new Error('TRUST_PROXY requires TRUSTED_PROXY_CIDRS');
+  }
   const origin = env.PUBLIC_ORIGIN || 'http://localhost:8787';
   const url = new URL(origin);
   const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
@@ -61,14 +68,18 @@ export function loadConfig(env = process.env) {
   return {
     host: env.HOST || '127.0.0.1', port: number(env, 'PORT', 8787, 0, 65535),
     origin, dbPath: resolve(env.DB_PATH || 'data/suichuan.sqlite'),
-    trustProxy: boolean(env, 'TRUST_PROXY'),
+    trustProxy, trustedProxyCidrs,
     maxConnections: number(env, 'WS_MAX_CONNECTIONS', 1000, 1, 100000),
     maxConnectionsPerIp: number(env, 'WS_MAX_CONNECTIONS_PER_IP', 64, 1, 100000),
     maxConnectionsPerDevice: number(env, 'WS_MAX_CONNECTIONS_PER_DEVICE', 8, 1, 100),
     maxPendingConnections: number(env, 'WS_MAX_PENDING_CONNECTIONS', 128, 1, 100000),
     maxPendingPerIp: number(env, 'WS_MAX_PENDING_PER_IP', 8, 1, 1000),
+    pendingTimeout: number(env, 'WS_PENDING_TIMEOUT_SECONDS', 15, 5, 60) * 1000,
+    pendingFairAdmission: boolean(env, 'WS_PENDING_FAIR_ADMISSION_ENABLED', true),
     maxGuestConnections: number(env, 'WS_MAX_GUEST_CONNECTIONS', 256, 1, 100000),
     guestIdleTimeout: number(env, 'WS_GUEST_IDLE_SECONDS', 60, 5, 3600) * 1000,
+    guestPreviewEnabled: boolean(env, 'WS_GUEST_PREVIEW_ENABLED', true),
+    guestPreviewTimeout: number(env, 'WS_GUEST_PREVIEW_SECONDS', 60, 5, 3600) * 1000,
     publishInterval: number(env, 'WS_PUBLISH_INTERVAL_MS', 50, 10, 1000),
     maxBufferedBytes: number(env, 'WS_MAX_BUFFERED_KB', 1024, 64, 16384) * 1024,
     messageRate: number(env, 'WS_MESSAGE_RATE_PER_MINUTE', 3000, 60, 60000),
@@ -81,6 +92,23 @@ export function loadConfig(env = process.env) {
     transferBurst: number(env, 'WS_TRANSFER_BURST', 16, 1, 1000),
     transferIpRate: number(env, 'WS_TRANSFER_IP_RATE_PER_MINUTE', 1800, 1, 60000),
     transferIpBurst: number(env, 'WS_TRANSFER_IP_BURST', 48, 1, 10000),
+    shareListRate: number(env, 'SHARE_LIST_RATE_PER_MINUTE', 30, 1, 6000),
+    shareListBurst: number(env, 'SHARE_LIST_BURST', 5, 1, 100),
+    shareListIpRate: number(env, 'SHARE_LIST_IP_RATE_PER_MINUTE', 120, 1, 60000),
+    shareListIpBurst: number(env, 'SHARE_LIST_IP_BURST', 20, 1, 1000),
+    registerIpRate: number(env, 'DEVICE_REGISTER_IP_RATE_PER_MINUTE', 5, 1, 6000),
+    registerIpBurst: number(env, 'DEVICE_REGISTER_IP_BURST', 10, 1, 1000),
+    registerGlobalRate: number(env, 'DEVICE_REGISTER_GLOBAL_RATE_PER_MINUTE', 30, 1, 60000),
+    registerGlobalBurst: number(env, 'DEVICE_REGISTER_GLOBAL_BURST', 60, 1, 10000),
+    maxDevices: number(env, 'DEVICES_MAX_RECORDS', 100000, 1, 10000000),
+    deviceRetention: number(env, 'DEVICE_UNPAIRED_RETENTION_DAYS', 30, 1, 3650) * 86400000,
+    deviceCleanupEnabled: boolean(env, 'DEVICE_CLEANUP_ENABLED'),
+    turnRate: number(env, 'TURN_ISSUE_RATE_PER_MINUTE', 60, 1, 6000),
+    turnBurst: number(env, 'TURN_ISSUE_BURST', 32, 2, 1000),
+    turnIpRate: number(env, 'TURN_ISSUE_IP_RATE_PER_MINUTE', 120, 1, 60000),
+    turnIpBurst: number(env, 'TURN_ISSUE_IP_BURST', 64, 2, 10000),
+    turnGlobalRate: number(env, 'TURN_ISSUE_GLOBAL_RATE_PER_MINUTE', 600, 1, 60000),
+    turnGlobalBurst: number(env, 'TURN_ISSUE_GLOBAL_BURST', 128, 2, 10000),
     maxFileBytes: number(env, 'MAX_FILE_MB', 50, 1, 1024) * 1024 * 1024,
     maxTextBytes: 1024 * 1024, maxActive: 16,
     codeTtl: 600000, challengeTtl: 60000,
@@ -91,15 +119,15 @@ export function loadConfig(env = process.env) {
     shareWatcherLimit: Math.floor(number(env, 'SHARE_WATCHER_LIMIT', 200, 1, 1000)),
     joinLimit: 5, joinGlobalLimit: number(env, 'PAIR_GLOBAL_LIMIT', 100, 1, 10000),
     turnUrls, turnSecret, turnAuthMode, turnUsername, turnPassword, stunUrls, forceRelay, defaultLocale, cliDownloadUrl, indexnowKey, analyticsEnabled, analyticsPath,
-    turnCredentialTtlSeconds: number(env, 'TURN_CREDENTIAL_TTL_SECONDS', 3600, 3600, 86400)
+    turnCredentialTtlSeconds: number(env, 'TURN_CREDENTIAL_TTL_SECONDS', 900, 300, 86400)
   };
 }
 
-function boolean(env, name) {
+function boolean(env, name, fallback = false) {
   if (env[name] !== undefined && !['', '0', '1'].includes(env[name])) {
     throw new Error(`${name} must be 0 or 1`);
   }
-  return env[name] === '1';
+  return env[name] === undefined ? fallback : env[name] === '1';
 }
 
 export function iceUrls(value, name, schemes) {

@@ -281,11 +281,11 @@ function render() {
     else if (!closed && !occupied) {
         const detail = el('div', 'share-detail');
         const online = el('span', 'qt-connection');
-        online.append(el('span', `qt-status-dot${current.senderOnline ? ' is-connected' : ''}`), el('span', '', current.senderOnline ? t("app.online") : t("share.reconnecting.alt")));
+        online.append(el('span', `qt-status-dot${current.senderOnline && !connection.suspended ? ' is-connected' : ''}`), el('span', '', connection.suspended ? t("share.preview.paused") : current.senderOnline ? t("app.online") : t("share.reconnecting.alt")));
         detail.append(el('span', '', t("share.sending.device")), online);
         panel.append(detail, el('p', 'share-muted share-small', multiple ? t("share.unlimited.recipients.until.expiry.claims.queue.automatically.when") : t("share.one.recipient.for.the.entire.bundle.the.link")), nameControl());
         const claim = action(busy ? t("share.claiming") : t("share.receive.all.files", { p0: current.files.length }), () => rpc('share.claim'), true);
-        claim.disabled = busy || editingName || !connection.ready || !current.senderOnline;
+        claim.disabled = busy || editingName || (!connection.ready && !connection.suspended) || (!current.senderOnline && !connection.suspended);
         claim.dataset.control = 'claim';
         claim.dataset.claim = '';
         claim.classList.add('share-main-action');
@@ -307,6 +307,11 @@ function render() {
     }
 }
 connection.addEventListener('ready', async () => {
+    // An explicit claim already revalidates the share server-side after wake.
+    // Avoid a second inspect racing its response and replacing a claimed state.
+    if (busy) {
+        return;
+    }
     try {
         share = await connection.rpc('share.inspect', { token });
         error = '';

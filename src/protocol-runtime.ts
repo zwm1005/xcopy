@@ -42,7 +42,8 @@ const replyChecks: Record<RpcName, (value: unknown) => boolean> = {
     'transfer.start': ice, 'transfer.accept': record, 'transfer.progress': record, 'transfer.end': record, signal: record,
     'share.create': share, 'share.inspect': share, 'share.claim': share, 'share.retry': share,
     'share.claim.cancel': share, 'share.cancel': share, 'share.stop': share, 'share.file.start': ice,
-    'share.list': (v) => record(v) && arrayOf(v.shares, share) && number(v.maxShareFiles) && (v.maxShareBytes === null || number(v.maxShareBytes)) && number(v.shareProtocol),
+    'share.list': (v) => record(v) && Array.isArray(v.shares) && arrayOf(v.shares, share) && v.shares.length <= 50 && number(v.maxShareFiles) && (v.maxShareBytes === null || number(v.maxShareBytes)) && number(v.shareProtocol)
+        && optional(v.hasMore, boolean) && (v.nextCursor === null || optional(v.nextCursor, text)),
 };
 export function parseReply<K extends RpcName>(method: K, value: unknown): RpcOutput<K> {
     if (!replyChecks[method](value)) {

@@ -132,8 +132,8 @@ export class Connection extends EventTarget {
                 p.reject(new Error(t("connection.server.connection.lost.reconnecting")));
             }
             this.pending.clear();
-            this.emit('disconnected', {});
             this.suspended = this.guest && event.code === 1000 && event.reason === 'Guest session idle';
+            this.emit('disconnected', {});
             if (!this.stopped && !this.suspended) {
                 const delay = Math.min(1000 * 2 ** Math.min(this.attempt++, 6), 30000);
                 this.timer = setTimeout(() => this.connect(), delay * (0.75 + Math.random() * 0.5));

@@ -1,4 +1,7 @@
 export default {
+  "share.preview.paused": "预览已暂停，点击领取时刷新状态",
+  "share-ui.load.more": "加载更多分享记录",
+  "error.device.capacity": "新设备注册暂不可用，请稍后重试",
   "guide.help": "使用引导",
   "guide.step": "{current} / {total}",
   "guide.close": "关闭引导",

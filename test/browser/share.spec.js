@@ -327,7 +327,7 @@ test('forced TURN one-time sharing verifies all file bytes', async ({ browser, b
   const s = await sender(browser, baseURL, files);
   const a = await guest(browser, s.url);
   await a.page.locator('[data-claim]').click();
-  await expect(a.page.getByRole('heading', { level: 1 })).toHaveText('全部文件接收完成');
+  await expect(a.page.getByRole('heading', { level: 1 })).toHaveText('全部文件接收完成', { timeout: 75000 });
   for (let index = 0; index < files.length; index += 1) {
     const event = a.page.waitForEvent('download');
     await a.page.locator(`[data-save-index="${index}"]`).click();

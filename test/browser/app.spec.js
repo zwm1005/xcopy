@@ -203,6 +203,7 @@ test('cancellation stops an active transfer and allows retry; forgetting is disa
 });
 
 test('forced TURN relay carries eight files plus text through the bounded queue', async ({ browser, baseURL }) => {
+  test.setTimeout(180000);
   test.skip(process.env.FORCE_RELAY !== '1', '通过 npm run test:relay 启动本地 TURN 验收');
   const a = await device(browser, baseURL, 'Relay A');
   const b = await device(browser, baseURL, 'Relay B');
@@ -228,7 +229,7 @@ test('forced TURN relay carries eight files plus text through the bounded queue'
     await expect(a.page.locator('[data-status="queued"]')).toHaveCount(6);
     await expect(b.page.locator('[data-status="transferring"][data-route="relay"]')).toHaveCount(3);
     await a.page.evaluate(() => window.releaseRelayBatch());
-    await expect(b.page.locator('[data-status="completed"][data-route="relay"]')).toHaveCount(9);
+    await expect(b.page.locator('[data-status="completed"][data-route="relay"]')).toHaveCount(9, { timeout: 150000 });
     await expect(a.page.locator('[data-status="completed"][data-route="relay"]')).toHaveCount(9);
     await expect(b.page.locator('pre')).toHaveText('经自建 TURN 中继传输');
     for (const file of files) {

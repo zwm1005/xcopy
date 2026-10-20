@@ -1,4 +1,7 @@
 export default {
+  "share.preview.paused": "Preview paused. Receiving will refresh its status.",
+  "share-ui.load.more": "Load more shares",
+  "error.device.capacity": "New device registration is temporarily unavailable. Please try again later.",
   "guide.help": "Quick guide",
   "guide.step": "{current} / {total}",
   "guide.close": "Close guide",

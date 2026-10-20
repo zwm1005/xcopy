@@ -31,7 +31,12 @@ export class TokenBuckets {
   // not consume a device's tokens while the client waits to retry.
   take(budgets) {
     const time = this.now();
-    const entries = budgets.map(({ key, burst, perMinute }) => {
+    const grouped = new Map();
+    for (const budget of budgets) {
+      const previous = grouped.get(budget.key);
+      grouped.set(budget.key, { ...budget, cost: (previous?.cost || 0) + (budget.cost ?? 1) });
+    }
+    const entries = [...grouped.values()].map(({ key, burst, perMinute, cost }) => {
       let entry = this.entries.get(key);
       if (!entry) {
         entry = { tokens: burst, updated: time };
@@ -40,12 +45,12 @@ export class TokenBuckets {
       entry.tokens = Math.min(burst, entry.tokens + Math.max(0, time - entry.updated) * perMinute / 60000);
       entry.updated = time;
       entry.expires = time + Math.max(60000, burst * 60000 / perMinute);
-      return { entry, perMinute };
+      return { entry, perMinute, cost };
     });
-    const wait = Math.max(0, ...entries.map(({ entry, perMinute }) => Math.ceil((1 - entry.tokens) * 60000 / perMinute)));
+    const wait = Math.max(0, ...entries.map(({ entry, perMinute, cost }) => Math.ceil((cost - entry.tokens) * 60000 / perMinute)));
     if (!wait) {
-      for (const { entry } of entries) {
-        entry.tokens -= 1;
+      for (const { entry, cost } of entries) {
+        entry.tokens -= cost;
       }
     }
     return wait;
@@ -60,30 +65,75 @@ export class TokenBuckets {
   }
 }
 
-export function connectionQuotas(config, requireThat) {
+export function connectionQuotas(config, requireThat, now = Date.now, retire) {
   let total = 0;
   let pending = 0;
   let guests = 0;
   const sources = new Map();
   const devices = new Map();
+  const leases = new Set();
+  const cooldowns = new Map();
+
+  function sweep() {
+    for (const [key, expires] of cooldowns) {
+      if (expires <= now()) {
+        cooldowns.delete(key);
+      }
+    }
+  }
+
+  function reclaim(phase, source, counts) {
+    sweep();
+    // Cooldown storage is bounded independently of the number of IPs seen.
+    if (cooldowns.size >= config.maxConnections * 2) {
+      return;
+    }
+    const candidates = [...leases].filter((lease) => {
+      if (lease.phase !== phase || lease.closing || lease.socket.destroyed || now() - lease.opened < 2000) {
+        return false;
+      }
+      if (phase === 'guest' && (!lease.ws || lease.ws.readyState !== 1 || lease.ws.guestClaims?.size)) {
+        return false;
+      }
+      return lease.source !== source && lease.counts[phase] > counts[phase] + 1;
+    });
+    candidates.sort((a, b) => b.counts[phase] - a.counts[phase] || a.opened - b.opened);
+    const victim = candidates[0];
+    if (victim) {
+      victim.closing = true;
+      cooldowns.set(`${phase}:${victim.source}`, now() + 15000);
+      if (phase === 'guest') {
+        retire(victim.ws, 1000, 'Guest session idle');
+      } else {
+        victim.socket.destroy();
+      }
+    }
+  }
 
   return {
+    sweep,
     reserve(source, socket) {
-      const counts = sources.get(source) || { total: 0, pending: 0 };
-      requireThat(total < config.maxConnections && pending < config.maxPendingConnections, 'BUSY', 'Too many connections');
+      const counts = sources.get(source) || { total: 0, pending: 0, guest: 0 };
       requireThat(counts.total < config.maxConnectionsPerIp && counts.pending < config.maxPendingPerIp, 'RATE_LIMIT', 'Too many connections');
+      requireThat((cooldowns.get(`pending:${source}`) || 0) <= now(), 'RATE_LIMIT', 'Too many connections');
+      requireThat(total < config.maxConnections, 'BUSY', 'Too many connections');
+      if (pending >= config.maxPendingConnections && config.pendingFairAdmission) {
+        reclaim('pending', source, counts);
+      }
+      requireThat(pending < config.maxPendingConnections, 'BUSY', 'Too many connections');
       sources.set(source, counts);
       total += 1;
       pending += 1;
       counts.total += 1;
       counts.pending += 1;
-      let phase = 'pending';
+      const lease = { source, socket, counts, phase: 'pending', opened: now(), closing: false, ws: null };
+      leases.add(lease);
       let deviceId;
       let released = false;
 
       const identify = (next) => {
-        requireThat(!released && phase === 'pending', 'INVALID', '已经建立会话');
-        phase = next;
+        requireThat(!released && !lease.closing && lease.phase === 'pending', 'INVALID', '已经建立会话');
+        lease.phase = next;
         pending -= 1;
         counts.pending -= 1;
       };
@@ -93,13 +143,15 @@ export function connectionQuotas(config, requireThat) {
           return;
         }
         released = true;
+        leases.delete(lease);
         total -= 1;
         counts.total -= 1;
-        if (phase === 'pending') {
+        if (lease.phase === 'pending') {
           pending -= 1;
           counts.pending -= 1;
-        } else if (phase === 'guest') {
+        } else if (lease.phase === 'guest') {
           guests -= 1;
+          counts.guest -= 1;
         } else {
           const count = devices.get(deviceId) - 1;
           if (count) {
@@ -113,16 +165,28 @@ export function connectionQuotas(config, requireThat) {
         }
       });
       return {
-        device(id) {
+        bind(ws) {
+          lease.ws = ws;
+        },
+        checkDevice(id) {
+          requireThat(!released && !lease.closing && lease.phase === 'pending', 'INVALID', '已经建立会话');
           requireThat((devices.get(id) || 0) < config.maxConnectionsPerDevice, 'BUSY', 'Too many connections');
+        },
+        device(id) {
+          this.checkDevice(id);
           identify('device');
           deviceId = id;
           devices.set(id, (devices.get(id) || 0) + 1);
         },
         guest() {
+          requireThat((cooldowns.get(`guest:${source}`) || 0) <= now(), 'RATE_LIMIT', 'Too many connections');
+          if (guests >= config.maxGuestConnections && config.guestPreviewEnabled) {
+            reclaim('guest', source, counts);
+          }
           requireThat(guests < config.maxGuestConnections, 'BUSY', 'Too many connections');
           identify('guest');
           guests += 1;
+          counts.guest += 1;
         }
       };
     }

@@ -1,5 +1,6 @@
 // Protocol error descriptors; generated alongside the locale catalog.
 export const messageKeys = {
+  "新设备注册暂不可用，请稍后重试": "error.device.capacity",
   "还有 {p0} 个文件需要保存，刷新、关闭或清空后将无法找回。": "app.files.still.need.saving.refreshing.closing.or.clearing",
   "本页负责接收新内容。同一浏览器的其他随传页面只用于发送。": "app.this.page.receives.new.content.other.xcopy.tabs",
   "新内容由本机另一个随传页面接收，请切换到显示「本页负责接收」的页面查看。关闭它后，由剩余页面中的一页自动接收后续内容。": "app.another.xcopy.tab.on.this.device.receives.new",

@@ -18,7 +18,7 @@ test('ICE URI syntax, auth modes and configuration combinations fail closed with
     assert.throws(() => loadConfig({ STUN_URLS: url }), /STUN_URLS/);
   }
   const secret = 'private-value-'.repeat(4);
-  for (const config of [{ FORCE_RELAY: '1' }, { TURN_URLS: 'turn:host' }, { TURN_URLS: 'turn:host', TURN_AUTH_MODE: 'static' }, { TURN_AUTH_MODE: 'wrong' }, { TURN_AUTH_MODE: 'static', TURN_SECRET: secret }, { TURN_USERNAME: 'user' }, { TURN_CREDENTIAL_TTL_SECONDS: '3599' }, { TURN_CREDENTIAL_TTL_SECONDS: '86401' }, { INDEXNOW_KEY: 'short' }, { DEFAULT_LOCALE: 'xx' }, { CLI_DOWNLOAD_URL: 'javascript:alert(1)' }]) {
+  for (const config of [{ FORCE_RELAY: '1' }, { TURN_URLS: 'turn:host' }, { TURN_URLS: 'turn:host', TURN_AUTH_MODE: 'static' }, { TURN_AUTH_MODE: 'wrong' }, { TURN_AUTH_MODE: 'static', TURN_SECRET: secret }, { TURN_USERNAME: 'user' }, { TURN_CREDENTIAL_TTL_SECONDS: '299' }, { TURN_CREDENTIAL_TTL_SECONDS: '86401' }, { INDEXNOW_KEY: 'short' }, { DEFAULT_LOCALE: 'xx' }, { CLI_DOWNLOAD_URL: 'javascript:alert(1)' }]) {
     assert.throws(() => loadConfig(config), error => !error.message.includes(secret));
   }
   const config = loadConfig({ TURN_URLS: 'turn:relay.example.com:3478?transport=tcp,turns:[::1]:5349?transport=tcp', TURN_AUTH_MODE: 'static', TURN_USERNAME: 'test-user', TURN_PASSWORD: secret, FORCE_RELAY: '1', DEFAULT_LOCALE: 'en' });
