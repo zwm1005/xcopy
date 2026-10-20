@@ -1,0 +1,31 @@
+# Copy to /etc/nginx/snippets/xcopy-analytics-private.conf (owner root, mode 600).
+# Replace this value with ANALYTICS_PROXY_KEY from your own Java deployment.
+proxy_set_header X-Analytics-Proxy-Key "REPLACE_WITH_YOUR_OWN_RANDOM_SECRET_AT_LEAST_32_CHARACTERS";
+proxy_set_header X-Analytics-Site xcopy;
+proxy_set_header X-Analytics-Client-IP $remote_addr;
+proxy_set_header X-Request-ID $request_id;
+proxy_set_header Host $host;
+proxy_set_header Origin $http_origin;
+proxy_set_header Sec-Fetch-Site $http_sec_fetch_site;
+proxy_set_header Cookie $http_cookie;
+proxy_set_header Authorization "";
+proxy_set_header X-Forwarded-For "";
+proxy_set_header X-Real-IP "";
+proxy_set_header Forwarded "";
+proxy_set_header X-Forwarded-Host "";
+proxy_set_header X-Forwarded-Proto "";
+proxy_set_header X-Forwarded-Port "";
+proxy_http_version 1.1;
+proxy_set_header Connection "";
+client_max_body_size 8k;
+proxy_connect_timeout 1s;
+proxy_read_timeout 6s;
+proxy_send_timeout 2s;
+proxy_buffering off;
+proxy_cache off;
+proxy_next_upstream off;
+proxy_hide_header Access-Control-Allow-Origin;
+add_header Cache-Control "no-store" always;
+# Requests carry no raw IP in query strings. Avoid creating a second access log
+# containing every visitor IP; application retention applies to database data.
+access_log off;
