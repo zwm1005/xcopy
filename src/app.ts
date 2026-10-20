@@ -435,6 +435,16 @@ function closeDialog() {
     get<HTMLElement>('.qt-main').inert = false;
     lastFocus?.focus();
 }
+function renderApproval() {
+    const request = state.requests[0];
+    if (request) {
+        get<HTMLElement>('[data-request-name]').textContent = request.name;
+        get<HTMLElement>('[data-request-id]').textContent = t("app.device.requesting.connection", { p0: request.fingerprint.slice(0, 12) });
+    }
+    const count = get<HTMLElement>('[data-request-count]');
+    count.hidden = state.requests.length < 2;
+    count.textContent = t("app.pending.pairing.requests", { count: state.requests.length });
+}
 function openDialog(type: string) {
     closeImagePreview();
     if (overlay.hidden) {
@@ -457,9 +467,8 @@ function openDialog(type: string) {
         get<HTMLInputElement>('[data-onboarding-name]').value = connection.device?.name || deviceNames.device();
         get<HTMLElement>('[data-name-error]').hidden = true;
     }
-    if (type === 'approval' && state.requests[0]) {
-        get<HTMLElement>('[data-request-name]').textContent = state.requests[0].name;
-        get<HTMLElement>('[data-request-id]').textContent = t("app.device.requesting.connection", { p0: state.requests[0].fingerprint.slice(0, 12) });
+    if (type === 'approval') {
+        renderApproval();
     }
     get<HTMLButtonElement>('[data-action="close"]').focus();
     if (type === 'name') {
@@ -926,7 +935,12 @@ transfers.addEventListener('notice', (e) => {
 transfers.addEventListener('change', renderTransfers);
 connection.addEventListener('pair.request', (e) => {
     state.requests.push(e.detail);
-    openDialog('approval');
+    if (state.modal === 'approval') {
+        renderApproval();
+    }
+    else {
+        openDialog('approval');
+    }
 });
 connection.addEventListener('pair.result', (e) => {
     const shownRequest = state.requests[0]?.id === e.detail.id;
@@ -942,6 +956,9 @@ connection.addEventListener('pair.result', (e) => {
         else {
             closeDialog();
         }
+    }
+    else if (state.modal === 'approval') {
+        renderApproval();
     }
 });
 connection.addEventListener('pair.codeExpired', (e) => {
@@ -972,6 +989,9 @@ connection.start();
 
 onLocaleChange(() => { renderTarget(); renderAttachments(); renderTransfers(); renderDevices(); renderReception(lastReception); updateCode(); shareUI?.render(); refreshMessages();
     const type = state.modal;
+    if (type === 'approval') {
+        renderApproval();
+    }
     get<HTMLElement>('[data-dialog-title]').textContent = type === 'devices' ? t("app.my.devices") : type === 'approval' ? t("app.confirm.new.device") : type === 'name' ? t("app.name.this.device") : t("app.connect.device"); });
 
 function refreshMessages() {
