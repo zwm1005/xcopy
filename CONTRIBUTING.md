@@ -28,7 +28,7 @@
 3. 在 `onLocaleChange` 中按原状态更新动态文案；不要重建连接、传输任务或设备身份。RTL 语言需额外适配布局。
 4. 检查窄屏、键盘操作、属性文案、输入焦点和切换时仍在进行的传输。
 
-语言优先级为 `?lang=`、已保存的手动选择、`DEFAULT_LOCALE`、英文；默认配置为 `en`，不再根据浏览器语言自动切换。切换不刷新页面，存储或配置接口不可用时也应保持可用。服务端错误使用可选的 `messageKey/messageParams`、`reasonKey/reasonParams`，保留旧中文字段以兼容已有客户端；新增消息时同步维护 `server/message-keys.js` 和词典。
+语言优先级为 `?lang=`、已保存的手动选择、浏览器首选语言。浏览器首选语言为中文（包括 `zh-CN`、`zh-TW`、`zh-HK` 等）时显示简体中文，其余或未知语言均显示英文；次选语言不覆盖首选语言。自动判断不会写入语言偏好，手动切换仍会保存。切换不刷新页面，存储或配置接口不可用时也应保持可用。服务端错误使用可选的 `messageKey/messageParams`、`reasonKey/reasonParams`，保留旧中文字段以兼容已有客户端；新增消息时同步维护 `server/message-keys.js` 和词典。
 
 ## 验证
 
@@ -205,7 +205,7 @@ WHERE d.last_seen_at < (unixepoch() - 30 * 86400) * 1000
 
 ### 搜索引擎抓取
 
-首页按 `?lang=en` / `?lang=zh-CN` 在服务端返回完整文案，禁用 JavaScript 也能读取正文、标题和描述。无语言参数时使用 `DEFAULT_LOCALE`；默认语言的 canonical 为 `/`，另一语言保留查询参数。`sitemap.xml` 列出两种语言并提供相互对应的 `hreflang`，不列入设备传输或分享页面。页面内容对普通访问者及 Googlebot、Baiduspider、bingbot 一致。
+首页、传输页及分享领取页按 `?lang=en` / `?lang=zh-CN` 在服务端返回完整文案，禁用 JavaScript 也能读取正文、标题和描述。无有效语言参数时根据 `Accept-Language` 的最高优先级语言选择中文或英文，并返回 `Content-Language` 和 `Vary: Accept-Language`；缺失或不支持的语言使用英文。`DEFAULT_LOCALE` 保留为 canonical URL 的语言配置，不再覆盖浏览器的界面语言；其 canonical 为 `/`，另一语言保留查询参数。`sitemap.xml` 列出两种语言并提供相互对应的 `hreflang`，不列入设备传输或分享页面。页面内容对普通访问者及 Googlebot、Baiduspider、bingbot 一致。
 
 `robots.txt` 允许抓取首页、样式、脚本和站点地图，只排除 API、WebSocket 和健康检查路径。不要使用 `Disallow: /s`，它也会阻止 `/sitemap.xml`、`/styles.css` 等资源。发送页及分享页允许读取 `noindex`，但通过 HTML 元标签与 `X-Robots-Tag` 阻止收录。
 

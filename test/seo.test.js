@@ -4,7 +4,27 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApp } from '../server/index.js';
-import { escapeHtml, translateHtml } from '../server/page-html.js';
+import { escapeHtml, pageLocale, translateHtml } from '../server/page-html.js';
+
+test('initial page language follows the primary browser preference with explicit URL overrides', () => {
+  const config = { origin: 'https://files.example.com', defaultLocale: 'zh-CN' };
+  for (const [header, expected] of [
+    ['zh-CN,zh;q=0.9,en;q=0.8', 'zh-CN'],
+    ['zh-TW,zh;q=0.9', 'zh-CN'],
+    ['zh-Hant-HK,en;q=0.8', 'zh-CN'],
+    ['en-US,zh-CN;q=0.8', 'en'],
+    ['fr-FR,zh-CN;q=0.9', 'en'],
+    ['en;q=0.5,zh;q=0.9', 'zh-CN'],
+    ['zh;q=0,en;q=1', 'en'],
+    ['*;q=1,zh;q=0.5', 'en'],
+    ['zh;q=invalid,en;q=1', 'en'],
+    ['', 'en']
+  ]) {
+    assert.equal(pageLocale('/', config, header), expected, header);
+    assert.equal(pageLocale('/transfer?lang=en', config, header), 'en');
+    assert.equal(pageLocale('/s?lang=zh-CN', config, header), 'zh-CN');
+  }
+});
 
 test('crawlers receive complete bilingual HTML, canonical URLs and reciprocal sitemap alternates', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'suichuan-seo-'));
@@ -77,9 +97,9 @@ test('crawlers receive complete bilingual HTML, canonical URLs and reciprocal si
           assert.match(await response.text(), /<meta name="robots" content="noindex,/);
         }
         const root = await (await fetch(origin + '/')).text();
-        assert.ok(root.includes(`<html lang="${defaultLocale}">`));
+        assert.ok(root.includes('<html lang="en">'));
         const invalid = await (await fetch(origin + '/?lang=%3Cscript%3E&tracking=ignored')).text();
-        assert.ok(invalid.includes(`<link rel="canonical" href="${publicOrigin}/">`));
+        assert.ok(invalid.includes(`<link rel="canonical" href="${canonical('en')}">`));
         for (const path of ['/?lang=zh-CN', '/sitemap.xml', '/robots.txt', '/transfer']) {
           const head = await fetch(origin + path, { method: 'HEAD' });
           assert.equal(head.status, 200);

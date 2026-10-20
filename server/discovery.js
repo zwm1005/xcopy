@@ -32,11 +32,14 @@ export function discovery(path, req, res, config) {
   return true;
 }
 
-export function pageMetadata(content, file, config, requestUrl = '/') {
-  if (!['/index.html', '/transfer.html'].includes(file)) {
+export function pageMetadata(content, file, config, requestUrl = '/', acceptLanguage = '') {
+  if (!['/index.html', '/transfer.html', '/share.html'].includes(file)) {
     return content;
   }
-  const locale = pageLocale(requestUrl, config);
+  const locale = pageLocale(requestUrl, config, acceptLanguage);
+  if (file === '/share.html') {
+    return translateHtml(content, locale);
+  }
   const url = localizedUrl(config, locale, file === '/index.html' ? '/' : '/transfer');
   const canonical = `<link rel="canonical" href="${xml(url)}">`;
   let home = '';

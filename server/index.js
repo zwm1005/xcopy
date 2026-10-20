@@ -521,7 +521,9 @@ export function createApp(overrides = {}) {
     }
     if (path === '/analytics-privacy' && config.analyticsEnabled) {
       res.setHeader('X-Robots-Tag', 'noindex, follow');
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(req.method === 'HEAD' ? undefined : analyticsPrivacy(config, req.url));
+      res.setHeader('Content-Language', pageLocale(req.url, config, req.headers['accept-language']));
+      res.setHeader('Vary', 'Accept-Language');
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(req.method === 'HEAD' ? undefined : analyticsPrivacy(config, req.url, req.headers['accept-language']));
       return;
     }
     if (path === '/analytics.js' && !config.analyticsEnabled) {
@@ -545,13 +547,14 @@ export function createApp(overrides = {}) {
     }
     try {
       const content = await readFile(resolve(publicDir, `.${file}`));
-      if (['/index.html', '/transfer.html'].includes(file)) {
-        res.setHeader('Content-Language', pageLocale(req.url, config));
+      if (['/index.html', '/transfer.html', '/share.html'].includes(file)) {
+        res.setHeader('Content-Language', pageLocale(req.url, config, req.headers['accept-language']));
+        res.setHeader('Vary', 'Accept-Language');
       }
       if (['/transfer.html', '/share.html'].includes(file)) {
         res.setHeader('X-Robots-Tag', file === '/share.html' ? 'noindex, nofollow' : 'noindex, follow');
       }
-      res.writeHead(200, { 'Content-Type': mimeTypes[extname(file)] || 'text/plain; charset=utf-8' }).end(req.method === 'HEAD' ? undefined : analyticsMarkup(pageMetadata(content, file, config, req.url), file, config));
+      res.writeHead(200, { 'Content-Type': mimeTypes[extname(file)] || 'text/plain; charset=utf-8' }).end(req.method === 'HEAD' ? undefined : analyticsMarkup(pageMetadata(content, file, config, req.url, req.headers['accept-language']), file, config));
     } catch {
       res.writeHead(500).end('Service unavailable');
     }

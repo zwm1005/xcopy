@@ -3,7 +3,7 @@ import zh from '../dist/public/i18n/zh-CN.js';
 
 export const escapeHtml = (text) => String(text).replace(/[<>&"']/g, (character) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' })[character]);
 
-export function pageLocale(requestUrl, config) {
+export function pageLocale(requestUrl, config, acceptLanguage = '') {
   const requested = new URL(requestUrl, config.origin).searchParams.get('lang') || '';
   if (/^zh(?:-|$)/i.test(requested)) {
     return 'zh-CN';
@@ -11,7 +11,15 @@ export function pageLocale(requestUrl, config) {
   if (/^en(?:-|$)/i.test(requested)) {
     return 'en';
   }
-  return config.defaultLocale;
+  // Use the browser's primary preference, even if it is not a supported UI
+  // language. A secondary Chinese preference must not override another primary.
+  const preferences = acceptLanguage.split(',').map((entry) => {
+    const [language, ...parameters] = entry.trim().split(';');
+    const weight = parameters.find((parameter) => /^q=/i.test(parameter.trim()))?.trim().slice(2);
+    return { language: language.trim(), quality: weight === undefined ? 1 : Number(weight) };
+  }).filter(({ language, quality }) => (language === '*' || /^[a-z]{1,8}(?:-[a-z0-9]{1,8})*$/i.test(language)) && quality > 0 && quality <= 1)
+    .sort((a, b) => b.quality - a.quality);
+  return /^zh(?:-|$)/i.test(preferences[0]?.language || '') ? 'zh-CN' : 'en';
 }
 
 export function localizedUrl(config, locale, path = '/') {
