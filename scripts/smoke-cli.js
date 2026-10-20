@@ -144,7 +144,26 @@ try {
   expect((await readReceived(textRecord.path)).toString()).toBe(text);
   expect((await cli(['read', textRecord.id])).text).toBe(text);
   checks.push('浏览器 → CLI：中文、多行、emoji 与首尾空格完全一致');
-  const fileBytes = Buffer.alloc(process.env.XCOPY_LARGE === '1' ? 50 * 1048576 : 2 * 1048576, 0x5a);
+  const longTurn = process.env.XCOPY_LONG_TURN === '1';
+  if (longTurn) {
+    await page.evaluate(async () => {
+      const { Transfers } = await import('/transfer.js');
+      const send = Transfers.prototype.sendBytes;
+      Transfers.prototype.sendBytes = async function (item) {
+        if (item.name === '浏览器测试.bin') {
+          const blob = item.blob;
+          item.blob = { slice(start, end) {
+            return { async arrayBuffer() {
+              await new Promise((resolve) => setTimeout(resolve, 30000));
+              return blob.slice(start, end).arrayBuffer();
+            } };
+          } };
+        }
+        return send.call(this, item);
+      };
+    });
+  }
+  const fileBytes = Buffer.alloc((longTurn ? 32 : process.env.XCOPY_LARGE === '1' ? 50 : 2) * 1048576, 0x5a);
   const files = [
     { name: '浏览器测试.bin', mimeType: 'application/octet-stream', buffer: fileBytes },
     { name: '空文件.txt', mimeType: 'text/plain', buffer: Buffer.alloc(0) },
@@ -158,7 +177,12 @@ try {
   }
   await page.locator('[data-files]').setInputFiles(filePaths);
   await page.locator('[data-action="send"]').click();
-  await expect.poll(async () => (await incoming()).filter(r => r.status === 'completed').length, { timeout: 120000 }).toBe(4);
+  const fileStarted = Date.now();
+  await expect.poll(async () => (await incoming()).filter(r => r.status === 'completed').length, { timeout: longTurn ? 1500000 : 120000 }).toBe(4);
+  if (longTurn) {
+    expect(Date.now() - fileStarted).toBeGreaterThan(900000);
+    checks.push('真实 TURN：32 MiB 浏览器到 CLI 慢传超过 900 秒凭证有效期');
+  }
   for (const file of files) {
     const r = (await incoming()).find(r => r.metadata.name === file.name);
     expect((await readReceived(r.path)).equals(file.buffer)).toBe(true);
@@ -172,6 +196,9 @@ try {
   expect(await received.locator('pre').textContent()).toBe(text);
   checks.push('CLI → 浏览器：文字完整保留');
   for (const file of files) {
+    if (longTurn && file.name === '浏览器测试.bin') {
+      continue;
+    }
     const r = (await incoming()).find(r => r.metadata.name === file.name);
     const sent = await cli(['send', r.path, '--to', browserPeer.id]);
     expect(sent.status).toBe('completed');

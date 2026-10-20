@@ -146,20 +146,17 @@ test('pongs and invalid requests do not extend an unbound guest lifetime; device
   assert.deepEqual((await device.rpc('peers.list')).peers, []);
 });
 
-test('valid share views, queued claims and draining transfers survive guest idle cleanup', async (t) => {
+test('queued claims and draining transfers survive guest idle cleanup', async (t) => {
   const { app, connect, advance } = await setup(t, { shareConcurrency: 1 });
   const sender = await (await connect()).auth();
   const share = await sender.rpc('share.create', { mode: 'multiple', shareProtocol: 2, minutes: 10, files: [metadata] });
   const first = await (await connect()).guest();
-  const queued = await (await connect()).guest();
   await first.rpc('share.inspect', { token: share.token });
+  const a = await first.rpc('share.claim', { token: share.token });
   advance(61000);
   app.sweep();
   assert.equal(first.ws.readyState, WebSocket.OPEN);
-  // The second guest has no business yet, so create it after the view test.
-  await queued.close();
   const second = await (await connect()).guest();
-  const a = await first.rpc('share.claim', { token: share.token });
   const b = await second.rpc('share.claim', { token: share.token });
   assert.equal(b.myClaim.state, 'queued');
   advance(600001);
@@ -312,7 +309,8 @@ test('batch transfers and reconnect resume keep active counts and receiving owne
 });
 
 test('one IP cannot accumulate 1000 retained guest connections across seventeen rate windows', async (t) => {
-  const { app, connect, denied, advance } = await setup(t);
+  // Also retain the old per-IP protection when the new preview policy is disabled.
+  const { app, connect, denied, advance } = await setup(t, { guestPreviewEnabled: false });
   const sender = await (await connect()).auth();
   const share = await sender.rpc('share.create', { minutes: 60, files: [metadata] });
   let accepted = 0;

@@ -113,3 +113,70 @@ test('completed share downloads survive guest cleanup without an automatic recon
     await Promise.all([sender.context.close(), guest.close()]);
   }
 });
+
+test('a sleeping preview wakes once to claim and preserves the recipient name', async ({ browser, baseURL }) => {
+  const sender = await device(browser, baseURL);
+  const guest = await browser.newContext({ locale: 'zh-CN' });
+  const clockFile = `/tmp/suichuan-e2e-clock-${new URL(baseURL).port}`;
+  try {
+    await sender.page.getByRole('tab', { name: '链接分享', exact: true }).click();
+    await sender.page.locator('[data-files]').setInputFiles({ name: 'wake.txt', mimeType: 'text/plain', buffer: Buffer.from('wake') });
+    await sender.page.locator('[data-share-generate]').click();
+    const page = await guest.newPage();
+    let opened = 0;
+    let closed = 0;
+    const messages = [];
+    page.on('websocket', (ws) => {
+      opened += 1;
+      ws.on('close', () => { closed += 1; });
+      ws.on('framesent', ({ payload }) => { messages.push(JSON.parse(String(payload)).type); });
+    });
+    await page.goto(await sender.page.locator('[data-share-url]').inputValue());
+    await expect(page.locator('[data-claim]')).toBeEnabled();
+    await page.locator('[data-control="edit-name"]').click();
+    await page.locator('[data-recipient-name-input]').fill('休眠后继续领取');
+    await writeFile(clockFile, '61000');
+    await expect.poll(() => closed).toBe(1);
+    await page.waitForTimeout(1500);
+    expect(opened).toBe(1);
+    await expect(page.locator('[data-recipient-name-input]')).toHaveValue('休眠后继续领取');
+    await page.getByRole('button', { name: '保存名称', exact: true }).click();
+    await expect(page.locator('[data-claim]')).toBeEnabled();
+    const name = (await page.locator('[data-recipient-name]').textContent()).split('：').at(-1);
+    messages.length = 0;
+    await page.locator('[data-claim]').click();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('全部文件接收完成');
+    expect(opened).toBe(2);
+    expect(messages.filter((type) => type === 'share.claim')).toHaveLength(1);
+    expect(messages.filter((type) => type === 'share.inspect')).toHaveLength(0);
+    expect(await page.locator('[data-recipient-name]').textContent()).toContain(name);
+  } finally {
+    await rm(clockFile, { force: true });
+    await Promise.all([sender.context.close(), guest.close()]);
+  }
+});
+
+test('a sleeping preview revalidates expiry when explicitly claimed', async ({ browser, baseURL }) => {
+  const sender = await device(browser, baseURL);
+  const guest = await browser.newContext();
+  const clockFile = `/tmp/suichuan-e2e-clock-${new URL(baseURL).port}`;
+  try {
+    await sender.page.getByRole('tab', { name: '链接分享', exact: true }).click();
+    await sender.page.locator('[data-files]').setInputFiles({ name: 'expired.txt', mimeType: 'text/plain', buffer: Buffer.from('expired') });
+    await sender.page.locator('[data-share-generate]').click();
+    const page = await guest.newPage();
+    let closed = 0;
+    page.on('websocket', (ws) => ws.on('close', () => { closed += 1; }));
+    await page.goto(await sender.page.locator('[data-share-url]').inputValue());
+    await expect(page.locator('[data-claim]')).toBeEnabled();
+    await writeFile(clockFile, '61000');
+    await expect.poll(() => closed).toBe(1);
+    await writeFile(clockFile, '610001');
+    await page.locator('[data-claim]').click();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('这份分享已过期');
+    await expect(page.locator('[data-save-index]')).toHaveCount(0);
+  } finally {
+    await rm(clockFile, { force: true });
+    await Promise.all([sender.context.close(), guest.close()]);
+  }
+});

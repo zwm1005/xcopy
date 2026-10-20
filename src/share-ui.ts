@@ -140,6 +140,9 @@ export class ShareComposer {
     shareMode: ShareMode = 'single';
     retryClaims = new Set<string>();
     busy = false;
+    historyCursor: string | null = null;
+    historyCleared = false;
+    loadingHistory = false;
     panel: HTMLElement;
     records: HTMLElement;
     clock: ReturnType<typeof setInterval>;
@@ -191,7 +194,8 @@ export class ShareComposer {
             }
             try {
                 const result = await connection.rpc('share.list');
-                result.shares.forEach((s) => this.apply(s));
+                this.historyCursor = this.historyCleared ? null : result.nextCursor ?? null;
+                this.applyHistory(result.shares, true);
             }
             catch (caught) {
                 const error = errorValue(caught);
@@ -217,6 +221,8 @@ export class ShareComposer {
     current() { return this.entries.find((s) => s.id === this.selected); }
     active() { return this.entries.some((s) => !terminal.has(s.status)); }
     clear() {
+        this.historyCleared = true;
+        this.historyCursor = null;
         this.entries = this.entries.filter((s) => !terminal.has(s.status));
         this.expandedRecords = new Set([...this.expandedRecords].filter((id) => this.entries.some((s) => s.id === id)));
         if (!this.current()) {
@@ -237,7 +243,20 @@ export class ShareComposer {
         this.changed();
         this.render();
     }
-    apply(value: ShareSnapshot) {
+    applyHistory(shares: ShareSnapshot[], firstPage = false) {
+        shares.forEach((share) => {
+            if (!this.historyCleared || !terminal.has(share.status) || this.entries.some((entry) => entry.id === share.id)) {
+                this.apply(share, true);
+            }
+        });
+        if (firstPage) {
+            const ids = new Set(shares.map((share) => share.id));
+            this.entries = [...shares.map((share) => this.entries.find((entry) => entry.id === share.id)!).filter(Boolean),
+                ...this.entries.filter((entry) => !ids.has(entry.id))];
+        }
+        this.render();
+    }
+    apply(value: ShareSnapshot, fromHistory = false) {
         let entry = this.entries.find((s) => s.id === value.id);
         if (!entry && this.pendingCreate && this.pendingCreate.id === value.requestId) {
             const fileIds = this.pendingCreate.fileIds;
@@ -247,6 +266,10 @@ export class ShareComposer {
             this.pendingCreate = null;
             // 分享持有独立的文件引用；只清理本次提交的草稿，不影响稍后添加的文件。
             this.consumeFiles(fileIds);
+        }
+        if (!entry && fromHistory) {
+            entry = { ...value, sources: [] };
+            this.entries.push(entry);
         }
         if (entry) {
             const completedClaims = new Set((entry.claims || []).filter(claim => claim.state === 'completed').map(claim => claim.id));
@@ -309,7 +332,7 @@ export class ShareComposer {
     start(id: string, claimId: string) {
         const entry = this.entries.find((s) => s.id === id);
         const claim = entry?.claims?.find((c) => c.id === claimId);
-        if (!entry || !claim || claim.state !== 'transferring' || terminal.has(entry.status)) {
+        if (!entry || !entry.sources.length || !claim || claim.state !== 'transferring' || terminal.has(entry.status)) {
             return;
         }
         const items = this.transfers.items.filter((i) => i.shareId === id && i.claimId === claimId);
@@ -392,7 +415,7 @@ export class ShareComposer {
         catch (caught) {
             const error = errorValue(caught);
             try {
-                const result = await this.connection.rpc('share.list');
+                const result = await this.connection.rpc('share.list', { requestId: this.pendingCreate?.id });
                 result.shares.forEach((s) => this.apply(s));
             }
             catch { /* 断线后由 ready 恢复同一页面的创建结果。 */ }
@@ -702,6 +725,30 @@ export class ShareComposer {
                 controls.append(view);
             }
             this.records.append(row);
+        }
+        if (this.historyCursor) {
+            const more = action(t("share-ui.load.more"), async () => {
+                if (this.loadingHistory || !this.historyCursor) {
+                    return;
+                }
+                this.loadingHistory = true;
+                this.render();
+                try {
+                    const result = await this.connection.rpc('share.list', { cursor: this.historyCursor });
+                    this.historyCursor = this.historyCleared ? null : result.nextCursor ?? null;
+                    this.applyHistory(result.shares);
+                }
+                catch (caught) {
+                    this.tell(errorValue(caught).message);
+                }
+                finally {
+                    this.loadingHistory = false;
+                    this.render();
+                }
+            });
+            more.dataset.shareControl = 'load-history';
+            more.disabled = this.loadingHistory || !this.connection.ready;
+            this.records.append(more);
         }
         restoreLocation();
         if (focusKey) {

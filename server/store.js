@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 export class Store {
-  constructor(path) {
+  constructor(path, now = Date.now()) {
     if (path !== ':memory:') {
       mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     }
@@ -20,6 +20,30 @@ export class Store {
         last_used INTEGER NOT NULL, PRIMARY KEY(a,b), CHECK(a < b)
       );
     `);
+    // Keep the four-column devices table compatible with previous releases.
+    // A side table also lets an old INSERT OR IGNORE refresh activity on rollback.
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS device_activity (
+          device_id TEXT PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
+          last_seen_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS device_activity_seen ON device_activity(last_seen_at, device_id);
+        CREATE INDEX IF NOT EXISTS pairs_b ON pairs(b);
+        CREATE TRIGGER IF NOT EXISTS device_legacy_activity BEFORE INSERT ON devices
+        BEGIN
+          UPDATE device_activity SET last_seen_at = MAX(last_seen_at, unixepoch() * 1000) WHERE device_id = NEW.id;
+        END;
+      `);
+      this.db.prepare('INSERT OR IGNORE INTO device_activity SELECT id, ? FROM devices').run(now);
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      this.db.close();
+      throw error;
+    }
+    this.deviceCount = this.db.prepare('SELECT COUNT(*) AS count FROM devices').get().count;
   }
 
   device(id) {
@@ -27,8 +51,68 @@ export class Store {
   }
 
   register(id, key, name, now) {
-    this.db.prepare('INSERT OR IGNORE INTO devices VALUES (?, ?, ?, ?)').run(id, key, name, now);
+    this.db.exec('BEGIN IMMEDIATE');
+    let added;
+    try {
+      added = this.db.prepare('INSERT OR IGNORE INTO devices (id, public_key, name, created_at) VALUES (?, ?, ?, ?)').run(id, key, name, now).changes;
+      this.touch([id], now, true);
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+    this.deviceCount += added;
     return this.device(id);
+  }
+
+  touch(ids, now, withinTransaction = false) {
+    const values = [...ids];
+    if (!values.length) {
+      return;
+    }
+    const statement = this.db.prepare('INSERT INTO device_activity VALUES (?, ?) ON CONFLICT(device_id) DO UPDATE SET last_seen_at = excluded.last_seen_at');
+    if (!withinTransaction) {
+      this.db.exec('BEGIN IMMEDIATE');
+    }
+    try {
+      for (const id of values) {
+        statement.run(id, now);
+      }
+      if (!withinTransaction) {
+        this.db.exec('COMMIT');
+      }
+    } catch (error) {
+      if (!withinTransaction) {
+        this.db.exec('ROLLBACK');
+      }
+      throw error;
+    }
+  }
+
+  cleanup(before, protectedIds, limit = 500) {
+    const candidates = this.db.prepare(`SELECT device_id FROM device_activity
+      WHERE last_seen_at < ?
+        AND NOT EXISTS (SELECT 1 FROM pairs WHERE a = device_id)
+        AND NOT EXISTS (SELECT 1 FROM pairs WHERE b = device_id)
+      ORDER BY last_seen_at, device_id LIMIT ?`).all(before, limit);
+    let removed = 0;
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const statement = this.db.prepare(`DELETE FROM devices WHERE id = ?
+        AND EXISTS (SELECT 1 FROM device_activity WHERE device_id = devices.id AND last_seen_at < ?)
+        AND NOT EXISTS (SELECT 1 FROM pairs WHERE a = devices.id OR b = devices.id)`);
+      for (const { device_id: id } of candidates) {
+        if (!protectedIds.has(id)) {
+          removed += statement.run(id, before).changes;
+        }
+      }
+      this.db.exec('COMMIT');
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+    this.deviceCount -= removed;
+    return { candidates: candidates.length, removed };
   }
 
   rename(id, name) {

@@ -5,7 +5,7 @@ import { pageLocale } from './page-html.js';
 import { messageDescriptor } from './messages.js';
 import { assertFrontend } from '../scripts/frontend-artifact.js';
 import { createServer } from 'node:http';
-import { createHash, createHmac, createPublicKey, randomBytes, randomInt, verify } from 'node:crypto';
+import { createHash, createPublicKey, randomBytes, randomInt, verify } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, extname } from 'node:path';
@@ -14,6 +14,8 @@ import { Store } from './store.js';
 import { loadConfig } from './config.js';
 import { createShares } from './shares.js';
 import { connectionQuotas, sourceKey, TokenBuckets } from './availability.js';
+import { clientSource } from './client-source.js';
+import { turnCredentials } from './turn.js';
 import { validDeviceName } from '../src/shared/device-name.js';
 
 const publicDir = fileURLToPath(new URL('../dist/public/', import.meta.url));
@@ -42,7 +44,9 @@ function cleanName(value) {
 
 export function createApp(overrides = {}) {
   const config = { ...loadConfig(), ...overrides };
-  const store = new Store(config.dbPath);
+  const resolveSource = clientSource(config);
+  const now = overrides.now || Date.now;
+  const store = new Store(config.dbPath, now());
   const sockets = new Set();
   const pagesByDevice = new Map();
   const activeByPair = new Map();
@@ -55,10 +59,13 @@ export function createApp(overrides = {}) {
   const requests = new Map();
   const transfers = new Map();
   const limits = new Map();
-  const now = overrides.now || Date.now;
   const buckets = new TokenBuckets(now);
-  const quotas = connectionQuotas(config, requireThat);
-  const shares = createShares({ config, now, requireThat, rate, rateStart, send, transfers, registerTransfer, finish, iceServers, cleanName, deviceName: (id) => store.device(id).name });
+  const quotas = connectionQuotas(config, requireThat, now, retire);
+  const turn = turnCredentials(config, now, limited);
+  const shares = createShares({ config, now, requireThat, rate, rateStart, rateList, send, transfers, registerTransfer, finish, cleanName, deviceName: (id) => store.device(id).name });
+  let lastDeviceTouch = now();
+  let lastDeviceCleanup = now();
+  let activityHealthy = true;
 
   function limited(wait) {
     const error = new ClientError('RATE_LIMIT', '操作太频繁，请稍后再试');
@@ -79,6 +86,10 @@ export function createApp(overrides = {}) {
   function rateStart(ws) {
     requireThat(ws.deviceId, 'UNAUTHORIZED', '请先验证设备身份');
     operation(ws, 'start', config.transferRate, config.transferBurst, config.transferIpRate, config.transferIpBurst);
+  }
+
+  function rateList(ws) {
+    operation(ws, 'share-list', config.shareListRate, config.shareListBurst, config.shareListIpRate, config.shareListIpBurst);
   }
 
   function rate(key, limit, windowMs = 60000, cooldown = windowMs) {
@@ -151,6 +162,8 @@ export function createApp(overrides = {}) {
 
   function registerTransfer(t) {
     requireThat((activeCounts.get(t.from) || 0) < config.maxActive && (activeCounts.get(t.to) || 0) < config.maxActive, 'BUSY', '传输任务较多，请稍后再试');
+    // Both endpoints are budgeted before any task or offer becomes visible.
+    const ice = turn.prepare(t);
     transfers.set(t.id, t);
     activeCounts.set(t.from, (activeCounts.get(t.from) || 0) + 1);
     activeCounts.set(t.to, (activeCounts.get(t.to) || 0) + 1);
@@ -160,6 +173,7 @@ export function createApp(overrides = {}) {
       active.add(t);
       activeByPair.set(key, active);
     }
+    return ice;
   }
 
   function peers(id) {
@@ -198,16 +212,6 @@ export function createApp(overrides = {}) {
 
   function publishPresence(id) {
     publish(id, ...store.peers(id).map((peer) => peer.id));
-  }
-
-  function iceServers(id, allowRelay = true) {
-    const result = config.stunUrls.length ? [{ urls: config.stunUrls }] : [];
-    if (allowRelay && config.turnUrls.length) {
-      const username = config.turnAuthMode === 'static' ? config.turnUsername : `${Math.floor(now() / 1000) + config.turnCredentialTtlSeconds}:${id.slice(0, 16)}`;
-      const credential = config.turnAuthMode === 'static' ? config.turnPassword : createHmac('sha1', config.turnSecret).update(username).digest('base64');
-      result.push({ urls: config.turnUrls, username, credential });
-    }
-    return result;
   }
 
   function finish(t, status, reason = '') {
@@ -302,6 +306,17 @@ export function createApp(overrides = {}) {
       ws.challenge = null;
       requireThat(c && c.expires > now(), 'AUTH_FAILED', '身份验证失败，请重试');
       requireThat(typeof data.signature === 'string' && data.signature.length < 200 && verify('sha256', Buffer.from(c.challenge), { key: c.key, dsaEncoding: 'ieee-p1363' }, Buffer.from(data.signature, 'base64')), 'AUTH_FAILED', '身份验证失败，请重试');
+      ws.quota.checkDevice(c.fingerprint);
+      if (!store.device(c.fingerprint)) {
+        requireThat(store.deviceCount < config.maxDevices, 'DEVICE_CAPACITY', '新设备注册暂不可用，请稍后重试');
+        const wait = buckets.take([
+          { key: `register:${ws.source}`, perMinute: config.registerIpRate, burst: config.registerIpBurst },
+          { key: 'register:global', perMinute: config.registerGlobalRate, burst: config.registerGlobalBurst }
+        ]);
+        if (wait) {
+          throw limited(wait);
+        }
+      }
       const device = store.register(c.fingerprint, c.publicKey, c.name, now());
       ws.quota.device(device.id);
       ws.deviceId = device.id;
@@ -416,10 +431,10 @@ export function createApp(overrides = {}) {
         const id = randomId();
         const policy = { directOnly: m.size > config.maxFileBytes, maxRelayFileBytes: config.maxFileBytes, forceRelay: config.forceRelay };
         const t = { id, ...policy, from: ws.deviceId, to: data.peerId, sender: ws, receiver, status: 'waiting', created: now(), updated: now() };
-        registerTransfer(t);
-        send(receiver, 'transfer.offer', { id, ...policy, peerId: t.from, peerName: store.device(t.from).name, metadata: { kind: m.kind, size: m.size, name: m.name, mime: m.mime }, iceServers: iceServers(t.to, !policy.directOnly) });
+        const ice = registerTransfer(t);
+        send(receiver, 'transfer.offer', { id, ...policy, peerId: t.from, peerName: store.device(t.from).name, metadata: { kind: m.kind, size: m.size, name: m.name, mime: m.mime }, iceServers: ice[1] });
         publish(t.from, t.to);
-        return { id, ...policy, iceServers: iceServers(t.from, !policy.directOnly) };
+        return { id, ...policy, iceServers: ice[0] };
       }
       case 'transfer.accept': {
         const t = task(ws, data.id);
@@ -545,18 +560,19 @@ export function createApp(overrides = {}) {
   server.on('upgrade', (req, socket, head) => {
     try {
       requireThat(req.headers.origin === config.origin && req.url === '/ws', 'FORBIDDEN', 'Origin rejected');
-      const source = sourceKey(config.trustProxy ? String(req.headers['x-forwarded-for'] || req.socket.remoteAddress).split(',')[0].trim() : req.socket.remoteAddress);
+      const source = sourceKey(resolveSource(req.socket.remoteAddress, req.headers['x-forwarded-for']) || '');
       requireThat(source, 'FORBIDDEN', 'Origin rejected');
       rate(`connect:${source}`, config.connectLimit ?? 60);
       const quota = quotas.reserve(source, socket);
       wss.handleUpgrade(req, socket, head, (ws) => {
         ws.source = source;
         ws.quota = quota;
+        quota.bind(ws);
         wss.emit('connection', ws);
       });
     } catch (error) {
       const status = error.code === 'RATE_LIMIT' ? '429 Too Many Requests' : error.code === 'BUSY' ? '503 Service Unavailable' : '403 Forbidden';
-      socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\nRetry-After: 5\r\n\r\n`, () => socket.destroy());
+      socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\nRetry-After: 1\r\n\r\n`, () => socket.destroy());
     }
   });
 
@@ -584,7 +600,7 @@ export function createApp(overrides = {}) {
         frame(ws, { replyTo: message.id, ok: true, data });
       } catch (error) {
         frame(ws, { replyTo: message?.id, ok: false, error: { code: error instanceof ClientError ? error.code : 'INVALID', message: error instanceof ClientError ? error.message : '请求无法处理', ...(error.retryAfterMs ? { retryAfterMs: error.retryAfterMs } : {}), ...messageDescriptor(error instanceof ClientError ? error.message : '请求无法处理') } });
-        if (error.code === 'BUSY' && !ws.deviceId && !ws.guestId) {
+        if (['BUSY', 'DEVICE_CAPACITY'].includes(error.code) && !ws.deviceId && !ws.guestId) {
           retire(ws, 1013, 'Connection quota reached');
         }
       }
@@ -628,6 +644,38 @@ export function createApp(overrides = {}) {
   function sweep() {
     shares.sweep();
     buckets.sweep();
+    quotas.sweep();
+    turn.sweep();
+    if (now() - lastDeviceTouch >= 300000) {
+      lastDeviceTouch = now();
+      try {
+        store.touch(pagesByDevice.keys(), now());
+        activityHealthy = true;
+      } catch {
+        activityHealthy = false;
+        console.error('Device activity update failed; cleanup deferred');
+      }
+    }
+    if (config.deviceCleanupEnabled && activityHealthy && now() - lastDeviceCleanup >= 60000) {
+      lastDeviceCleanup = now();
+      const protectedIds = new Set(pagesByDevice.keys());
+      for (const ws of sessions.values()) {
+        if (!ws.closedAt || now() - ws.closedAt <= config.reconnectGrace * 2) {
+          protectedIds.add(ws.deviceId);
+        }
+      }
+      for (const t of transfers.values()) {
+        if (!terminal.has(t.status)) {
+          protectedIds.add(t.from);
+          protectedIds.add(t.to);
+        }
+      }
+      try {
+        store.cleanup(now() - config.deviceRetention, protectedIds);
+      } catch {
+        console.error('Device cleanup failed; will retry next minute');
+      }
+    }
     for (const [code, c] of codes) {
       if (c.expires <= now()) {
         invalidateCode(code);
@@ -656,11 +704,15 @@ export function createApp(overrides = {}) {
       }
     }
     for (const ws of sockets) {
-      if (!ws.deviceId && !ws.guestId && now() - ws.openedAt > config.challengeTtl) {
+      if (!ws.deviceId && !ws.guestId && now() - ws.openedAt >= config.pendingTimeout) {
         retire(ws, 1008, 'Authentication timeout');
       }
       if (ws.guestId) {
-        if (shares.retains(ws)) {
+        if (config.guestPreviewEnabled && !ws.guestClaims?.size && !ws.lastClaim) {
+          if (now() >= ws.guestPreviewUntil) {
+            retire(ws, 1000, 'Guest session idle');
+          }
+        } else if (shares.retains(ws)) {
           ws.guestIdleSince = now();
         } else if (now() - ws.guestIdleSince > config.guestIdleTimeout) {
           retire(ws, 1000, 'Guest session idle');

@@ -24,7 +24,7 @@ export interface RpcMap {
   'transfer.end': Method<{ id: string; status: TerminalStatus; reasonCode?: string }, Empty>;
   'signal': Method<{ id: string; signal: Signal }, Empty>;
   'share.create': Method<{ requestId: string; minutes: number; mode: ShareMode; shareProtocol: number; files: { name: string; size: number; mime: string }[] }, ShareSnapshot>;
-  'share.list': Method<undefined, { shares: ShareSnapshot[]; maxShareFiles: number; maxShareBytes: number | null; shareProtocol: number }>;
+  'share.list': Method<{ limit?: number; cursor?: string; requestId?: string } | undefined, { shares: ShareSnapshot[]; maxShareFiles: number; maxShareBytes: number | null; shareProtocol: number; nextCursor?: string | null; hasMore?: boolean }>;
   'share.inspect': Method<{ token: string }, ShareSnapshot>;
   'share.claim': Method<{ token: string; name: string }, ShareSnapshot>;
   'share.retry': Method<{ id: string; claimId?: string }, ShareSnapshot>;
@@ -36,7 +36,7 @@ export interface RpcMap {
 export type RpcName = keyof RpcMap;
 export type RpcInput<K extends RpcName> = RpcMap[K]['input'];
 export type RpcOutput<K extends RpcName> = RpcMap[K]['output'];
-export type RpcArgs<K extends RpcName> = RpcInput<K> extends undefined ? [] | [undefined] : [RpcInput<K>];
+export type RpcArgs<K extends RpcName> = undefined extends RpcInput<K> ? [] | [RpcInput<K>] : [RpcInput<K>];
 export interface ConnectionEvents {
   ready: Ready;
   peers: { peers: Peer[]; name: string; reception?: Reception };

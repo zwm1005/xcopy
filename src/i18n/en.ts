@@ -1,4 +1,7 @@
 export default {
+  "share.preview.paused": "Preview paused. Receiving will refresh its status.",
+  "share-ui.load.more": "Load more shares",
+  "error.device.capacity": "New device registration is temporarily unavailable. Please try again later.",
   "language.label": "Language",
   "app.files.still.need.saving.refreshing.closing.or.clearing": "{p0} files still need saving. Refreshing, closing or clearing this page will discard them.",
   "app.this.page.receives.new.content.other.xcopy.tabs": "This page receives new content. Other XCopy tabs in this browser are for sending only.",

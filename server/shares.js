@@ -1,6 +1,6 @@
 import { messageDescriptor } from './messages.js';
 import { MAX_FILES_PER_SEND } from '../src/shared/transfer-limits.js';
-import { randomBytes } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { WebSocket } from 'ws';
 
 const randomId = () => randomBytes(32).toString('base64url');
@@ -9,10 +9,13 @@ const claimEnded = new Set(['completed', 'cancelled', 'expired', 'unavailable'])
 const taskEnded = new Set(['completed', 'failed', 'cancelled']);
 
 // 分享和领取会话分别授权；文件内容仅保留在发送、接收页面。
-export function createShares({ config, now, requireThat, rate, rateStart, send, transfers, registerTransfer, finish, iceServers, cleanName, deviceName }) {
+export function createShares({ config, now, requireThat, rate, rateStart, rateList, send, transfers, registerTransfer, finish, cleanName, deviceName }) {
   const shares = new Map();
   const tokens = new Map();
   const guests = new Map();
+  const senders = new Map();
+  const cursorKey = randomBytes(32);
+  let sequence = 0;
   const online = (ws) => ws?.readyState === WebSocket.OPEN;
   const limits = { maxShareFiles: MAX_FILES_PER_SEND, maxShareBytes: null, shareProtocol: 2 };
   const concurrency = config.shareConcurrency ?? 3;
@@ -21,6 +24,78 @@ export function createShares({ config, now, requireThat, rate, rateStart, send, 
   const live = (s) => [...s.claims.values()].filter((c) => !claimEnded.has(c.state));
   const ownClaim = (s, ws) => [...s.claims.values()].find((c) => c.receiver === ws) || (ws?.claimReceipt?.shareId === s.id ? ws.claimReceipt : null);
   const fileSnapshot = (s, c) => s.files.map((metadata, index) => ({ ...metadata, index, completed: Boolean(c?.files[index].completed) }));
+
+  function senderIndex(ws) {
+    let index = senders.get(ws);
+    if (!index) {
+      index = { scope: randomId(), items: new Map(), requests: new Map() };
+      senders.set(ws, index);
+    }
+    return index;
+  }
+
+  function encodeCursor(value) {
+    const payload = Buffer.from(JSON.stringify(value)).toString('base64url');
+    return `${payload}.${createHmac('sha256', cursorKey).update(payload).digest('base64url')}`;
+  }
+
+  function decodeCursor(value, scope) {
+    try {
+      requireThat(typeof value === 'string' && value.length <= 512, 'INVALID', '请求格式错误');
+      const [payload, signature, extra] = value.split('.');
+      const expected = createHmac('sha256', cursorKey).update(payload).digest();
+      const actual = Buffer.from(signature || '', 'base64url');
+      requireThat(!extra && actual.length === expected.length && timingSafeEqual(actual, expected), 'INVALID', '请求格式错误');
+      const cursor = JSON.parse(Buffer.from(payload, 'base64url').toString());
+      requireThat(cursor.scope === scope && Number.isSafeInteger(cursor.before) && cursor.before > 0
+        && Number.isSafeInteger(cursor.ceiling) && cursor.ceiling > 0 && cursor.before <= cursor.ceiling, 'INVALID', '请求格式错误');
+      return cursor;
+    } catch {
+      requireThat(false, 'INVALID', '请求格式错误');
+    }
+  }
+
+  function list(ws, data) {
+    rateList(ws);
+    const index = senderIndex(ws);
+    const pageSize = data.limit ?? 20;
+    requireThat(Number.isInteger(pageSize) && pageSize >= 1 && pageSize <= 50, 'INVALID', '请求格式错误');
+    if (data.requestId !== undefined) {
+      requireThat(typeof data.requestId === 'string' && data.requestId.length > 0 && data.requestId.length <= 64
+        && data.cursor === undefined && data.limit === undefined, 'INVALID', '请求格式错误');
+      const s = index.requests.get(data.requestId);
+      if (s) {
+        check(s);
+      }
+      return { shares: s ? [snapshot(s, ws)] : [], ...limits, nextCursor: null, hasMore: false };
+    }
+    const cursor = data.cursor === undefined ? { before: sequence + 1, ceiling: sequence, scope: index.scope } : decodeCursor(data.cursor, index.scope);
+    // One live share per sending page: it is necessarily the newest entry.
+    const entries = [...index.items.values()].filter((s) => s.sequence <= cursor.ceiling && s.sequence < cursor.before).sort((a, b) => b.sequence - a.sequence);
+    const result = { shares: [], ...limits, nextCursor: null, hasMore: false };
+    let bytes = 1024; // Envelope and bounded cursor headroom.
+    let last;
+    for (const s of entries) {
+      if (result.shares.length >= pageSize) {
+        break;
+      }
+      check(s);
+      const value = snapshot(s, ws);
+      const size = Buffer.byteLength(JSON.stringify(value)) + 1;
+      requireThat(size <= 512 * 1024 - 1024, 'SIZE_LIMIT', '请求格式错误');
+      if (bytes + size > 512 * 1024) {
+        break;
+      }
+      result.shares.push(value);
+      bytes += size;
+      last = s.sequence;
+    }
+    result.hasMore = result.shares.length < entries.length;
+    if (result.hasMore) {
+      result.nextCursor = encodeCursor({ ...cursor, before: last });
+    }
+    return result;
+  }
 
   function claimSnapshot(s, c) {
     const waiting = live(s).filter((entry) => entry.state === 'queued');
@@ -194,6 +269,11 @@ export function createShares({ config, now, requireThat, rate, rateStart, send, 
   }
 
   function resume(old, ws) {
+    const index = senders.get(old);
+    if (index) {
+      senders.delete(old);
+      senders.set(ws, index);
+    }
     ws.lastClaim = old.lastClaim;
     ws.claimReceipt = old.claimReceipt;
     ws.guestClaims = old.guestClaims;
@@ -232,6 +312,7 @@ export function createShares({ config, now, requireThat, rate, rateStart, send, 
       const name = data.name === undefined ? `Device-${randomBytes(2).toString('hex').toUpperCase()}` : cleanName(data.name);
       ws.quota.guest();
       ws.guestIdleSince = now();
+      ws.guestPreviewUntil = now() + config.guestPreviewTimeout;
       ws.guestClaims = new Set();
       ws.guestName = old?.guestName || name;
       ws.shareProtocol = data.shareProtocol;
@@ -253,7 +334,8 @@ export function createShares({ config, now, requireThat, rate, rateStart, send, 
       rate(`share:create:${ws.deviceId}`, 20);
       rate('share:create:global', 200);
       requireThat(data.requestId === undefined || (typeof data.requestId === 'string' && data.requestId.length > 0 && data.requestId.length <= 64), 'INVALID', '创建请求无效');
-      const previous = data.requestId && [...shares.values()].find((s) => s.sender === ws && s.requestId === data.requestId);
+      const index = senderIndex(ws);
+      const previous = data.requestId && index.requests.get(data.requestId);
       if (previous) {
         check(previous);
         return snapshot(previous, ws);
@@ -261,7 +343,7 @@ export function createShares({ config, now, requireThat, rate, rateStart, send, 
       const mode = data.mode ?? 'single';
       requireThat(['single', 'multiple'].includes(mode), 'INVALID', '请选择领取方式');
       requireThat(mode !== 'multiple' || data.shareProtocol === 2, 'UPDATE_REQUIRED', '请刷新发送页面后创建多人分享');
-      requireThat(shares.size < 2000 && ![...shares.values()].some((s) => s.sender === ws && !closed.has(s.status)), 'BUSY', '请先结束当前分享，再创建新的分享');
+      requireThat(shares.size < 2000 && ![...index.items.values()].some((s) => !closed.has(s.status)), 'BUSY', '请先结束当前分享，再创建新的分享');
       requireThat([10, 30, 60].includes(data.minutes), 'INVALID', '请选择有效期');
       requireThat(Array.isArray(data.files) && data.files.length > 0 && data.files.length <= limits.maxShareFiles, 'SIZE_LIMIT', `一次分享支持 1–${MAX_FILES_PER_SEND} 个文件`);
       let totalBytes = 0;
@@ -272,10 +354,14 @@ export function createShares({ config, now, requireThat, rate, rateStart, send, 
         return { kind: 'file', name: m.name, size: m.size, mime: m.mime };
       });
       requireThat(Number.isSafeInteger(totalBytes), 'SIZE_LIMIT', '文件总大小无效');
-      const s = { id: randomId(), token: randomId(), requestId: data.requestId || null, mode, sender: ws, senderName: deviceName(ws.deviceId), files, totalBytes,
+      const s = { id: randomId(), token: randomId(), sequence: ++sequence, requestId: data.requestId || null, mode, sender: ws, senderName: deviceName(ws.deviceId), files, totalBytes,
         claims: new Map(), completed: 0, failed: 0, accepting: true, status: 'ready', expires: now() + data.minutes * 60000, watchers: new Set() };
       shares.set(s.id, s);
       tokens.set(s.token, s);
+      index.items.set(s.id, s);
+      if (s.requestId) {
+        index.requests.set(s.requestId, s);
+      }
       return snapshot(s, ws);
     }
     if (type === 'share.inspect') {
@@ -359,13 +445,7 @@ export function createShares({ config, now, requireThat, rate, rateStart, send, 
     }
     if (type === 'share.list') {
       requireThat(ws.deviceId, 'UNAUTHORIZED', '请先验证设备身份');
-      return { shares: [...shares.values()].filter((s) => s.sender === ws).map((s) => {
-        check(s);
-        if (schedule(s)) {
-          publish(s);
-        }
-        return snapshot(s, ws);
-      }), ...limits };
+      return list(ws, data);
     }
     if (type === 'share.file.start') {
       rateStart(ws);
@@ -379,10 +459,10 @@ export function createShares({ config, now, requireThat, rate, rateStart, send, 
       const id = randomId();
       const policy = { directOnly: s.files[data.index].size > config.maxFileBytes, maxRelayFileBytes: config.maxFileBytes, forceRelay: config.forceRelay };
       const t = { id, ...policy, shareId: s.id, claimId: c.id, shareIndex: data.index, from: ws.deviceId, to: c.receiver.guestId, sender: ws, receiver: c.receiver, status: 'waiting', created: now(), updated: now() };
-      registerTransfer(t);
+      const ice = registerTransfer(t);
       f.taskId = id;
-      send(c.receiver, 'transfer.offer', { id, ...policy, peerId: t.from, peerName: s.senderName, metadata: { ...s.files[data.index], shareId: s.id, claimId: c.id, shareIndex: data.index }, iceServers: iceServers(t.to, !policy.directOnly) });
-      return { id, ...policy, iceServers: iceServers(t.from, !policy.directOnly) };
+      send(c.receiver, 'transfer.offer', { id, ...policy, peerId: t.from, peerName: s.senderName, metadata: { ...s.files[data.index], shareId: s.id, claimId: c.id, shareIndex: data.index }, iceServers: ice[1] });
+      return { id, ...policy, iceServers: ice[0] };
     }
     requireThat(false, 'INVALID', '不支持的分享请求');
   }
@@ -392,6 +472,9 @@ export function createShares({ config, now, requireThat, rate, rateStart, send, 
     retains(ws) {
       if (ws.guestClaims?.size) {
         return true;
+      }
+      if (config.guestPreviewEnabled) {
+        return false;
       }
       const s = shares.get(ws.shareView);
       return Boolean(s && !closed.has(s.status) && s.accepting && now() < s.expires && s.watchers.has(ws));
@@ -448,11 +531,21 @@ export function createShares({ config, now, requireThat, rate, rateStart, send, 
         if (closed.has(s.status) && now() - s.endedAt > 3600000) {
           shares.delete(id);
           tokens.delete(s.token);
+          const index = senders.get(s.sender);
+          index?.items.delete(s.id);
+          if (s.requestId) {
+            index?.requests.delete(s.requestId);
+          }
         }
       }
       for (const [id, ws] of guests) {
         if (!online(ws) && now() - ws.closedAt >= config.reconnectGrace) {
           guests.delete(id);
+        }
+      }
+      for (const [ws, index] of senders) {
+        if (!index.items.size && !online(ws)) {
+          senders.delete(ws);
         }
       }
     }

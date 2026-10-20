@@ -30,8 +30,8 @@ try {
   if (turnError || turn.exitCode !== null) {
     throw new Error('本机 TURN 启动失败，请安装 coturn，或用 TURNSERVER_BIN 指定 turnserver');
   }
-  const child = spawn(process.execPath, ['node_modules/@playwright/test/cli.js', 'test', '--output', `test-results/relay-${authMode}-${transport}`, '--grep', 'forced TURN'], {
-    stdio: 'inherit', env: { ...process.env, E2E_PORT: '8789', FORCE_RELAY: '1', TURN_URLS: (transport === 'both' ? ['udp', 'tcp'] : [transport]).map(value => `turn:127.0.0.1:${port}?transport=${value}`).join(','), TURN_AUTH_MODE: authMode, TURN_SECRET: authMode === 'shared-secret' ? secret : '', TURN_USERNAME: authMode === 'static' ? 'local-test' : '', TURN_PASSWORD: authMode === 'static' ? secret : '' }
+  const child = spawn(process.execPath, process.env.TEST_TURN_CLI === '1' ? ['scripts/smoke-cli.js'] : ['node_modules/@playwright/test/cli.js', 'test', '--output', `test-results/relay-${authMode}-${transport}`, '--grep', process.env.TEST_TURN_GREP || 'forced TURN'], {
+    stdio: 'inherit', env: { ...process.env, E2E_PORT: process.env.E2E_PORT || '8789', DEFAULT_LOCALE: 'zh-CN', XCOPY_FORCE_RELAY: '1', FORCE_RELAY: '1', TURN_URLS: (transport === 'both' ? ['udp', 'tcp'] : [transport]).map(value => `turn:127.0.0.1:${port}?transport=${value}`).join(','), TURN_AUTH_MODE: authMode, TURN_SECRET: authMode === 'shared-secret' ? secret : '', TURN_USERNAME: authMode === 'static' ? 'local-test' : '', TURN_PASSWORD: authMode === 'static' ? secret : '' }
   });
   const [code] = await once(child, 'exit');
   process.exitCode = code ?? 1;

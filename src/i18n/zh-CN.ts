@@ -1,4 +1,7 @@
 export default {
+  "share.preview.paused": "预览已暂停，点击领取时刷新状态",
+  "share-ui.load.more": "加载更多分享记录",
+  "error.device.capacity": "新设备注册暂不可用，请稍后重试",
   "language.label": "语言",
   "app.files.still.need.saving.refreshing.closing.or.clearing": "还有 {p0} 个文件需要保存，刷新、关闭或清空后将无法找回。",
   "app.this.page.receives.new.content.other.xcopy.tabs": "本页负责接收新内容。同一浏览器的其他随传页面只用于发送。",

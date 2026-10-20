@@ -1,3 +1,5 @@
+# Default Caddy ignores untrusted incoming XFF. CDN deployments must configure
+# exact trusted_proxies and trusted_proxies_strict; see CONTRIBUTING.md.
 {$PUBLIC_ORIGIN} {
   reverse_proxy app:8787
 }

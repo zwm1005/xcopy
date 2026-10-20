@@ -10,7 +10,7 @@ export const identity = () => generateKeyPairSync('ec', { namedCurve: 'prime256v
 
 export async function setup(t, overrides = {}) {
   let time = Date.now();
-  const app = createApp({ host: '127.0.0.1', port: 0, dbPath: ':memory:', trustProxy: true, now: () => time, ...overrides });
+  const app = createApp({ host: '127.0.0.1', port: 0, dbPath: ':memory:', trustProxy: true, trustedProxyCidrs: ['127.0.0.1/32'], now: () => time, ...overrides });
   const address = await app.listen();
   const url = `ws://127.0.0.1:${address.port}/ws`;
   const clients = [];

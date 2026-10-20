@@ -1,11 +1,13 @@
 services:
   turn:
-    image: coturn/coturn:latest
+    image: coturn/coturn:4.18.0
     restart: unless-stopped
     # 公网 Linux 主机使用 host 网络，避免媒体端口的大量 Docker NAT 映射。
     network_mode: host
     entrypoint: ["/bin/sh", "/opt/suichuan/turn-entrypoint.sh"]
     environment:
+      TURN_MAX_BPS: ${TURN_MAX_BPS:-81920}
+      TURN_BPS_CAPACITY: ${TURN_BPS_CAPACITY:-10485760}
       TURN_SECRET: ${TURN_SECRET:?请生成 TURN 共享密钥}
       TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP:?请设置中继服务器公网 IPv4}
       TURN_REALM: ${TURN_REALM:?请设置 TURN realm}
