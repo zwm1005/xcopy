@@ -93,19 +93,22 @@ test('repeated valid previews cannot extend the fixed guest deadline', async (t)
 });
 
 test('guest fairness reclaims only previews, protects admitted claims and cools down the source', async (t) => {
-  const { connect, advance } = await setup(t, { maxGuestConnections: 3 });
+  const { app, connect, advance } = await setup(t, { maxGuestConnections: 3 });
   const sender = await (await connect({ source: '203.0.113.1' })).auth();
   const share = await sender.rpc('share.create', { mode: 'multiple', shareProtocol: 2, minutes: 10, files: [metadata] });
   const active = await (await connect({ source: '192.0.2.1' })).guest();
   await active.rpc('share.claim', { token: share.token });
   const previews = [];
+  const previewSockets = [];
   for (let i = 0; i < 2; i += 1) {
+    const accepted = once(app.server, 'connection');
     const guest = await (await connect({ source: '192.0.2.1' })).guest();
+    previewSockets.push((await accepted)[0]);
     await guest.rpc('share.inspect', { token: share.token });
     previews.push(guest);
   }
   advance(2001);
-  const closed = once(previews[0].ws, 'close');
+  const closed = Promise.all([once(previews[0].ws, 'close'), once(previewSockets[0], 'close')]);
   const fresh = await connect({ source: '192.0.2.2' });
   await rejected(fresh.guest(), 'BUSY');
   await closed;
@@ -308,11 +311,12 @@ test('the default 128-pending pool remains accessible from a new source under co
 });
 
 test('the default 256-guest pool reclaims a preview even before its configured deadline', async (t) => {
-  const { connect, advance } = await setup(t, { guestPreviewTimeout: 3600000 });
+  const { app, connect, advance } = await setup(t, { guestPreviewTimeout: 3600000 });
   const sender = await (await connect({ source: '203.0.113.1' })).auth();
   const tab = await (await connect({ source: '203.0.113.1', keys: sender.keys })).auth();
   const shares = await Promise.all([sender, tab].map((s) => s.rpc('share.create', { minutes: 60, files: [metadata] })));
   const clients = [];
+  const firstAccepted = once(app.server, 'connection');
   for (let ip = 1; ip <= 4; ip += 1) {
     for (let n = 0; n < 64; n += 1) {
       if (n === 60) {
@@ -324,7 +328,8 @@ test('the default 256-guest pool reclaims a preview even before its configured d
     }
   }
   advance(2001);
-  const closed = once(clients[0].ws, 'close');
+  const [firstSocket] = await firstAccepted;
+  const closed = Promise.all([once(clients[0].ws, 'close'), once(firstSocket, 'close')]);
   await rejected((await connect({ source: '198.51.100.1' })).guest(), 'BUSY');
   await closed;
   await (await connect({ source: '198.51.100.1' })).guest();

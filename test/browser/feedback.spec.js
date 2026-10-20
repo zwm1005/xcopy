@@ -20,6 +20,7 @@ async function pair(a, b) {
   await b.locator('[data-code-input]').fill(code);
   await b.locator('[data-join]').click();
   await a.locator('[data-action="allow"]').click();
+  await expect(a.locator('.qt-overlay')).toBeHidden();
   await expect(b.locator('.qt-overlay')).toBeHidden();
 }
 async function slowFileReads(page) {
@@ -67,7 +68,7 @@ test('received text and mixed content show accurate notices and retain unread na
     await expect(b.page.locator('.qt-notice-title')).toHaveText('Received 2 items');
     await b.page.locator('[data-notice-control="view"]').click();
     await expect(b.page.locator('[data-mode="device"]')).toHaveAttribute('aria-selected', 'true');
-    await expect(b.page.locator('.qt-record-highlight')).toBeFocused();
+    await expect(b.page.locator('.qt-record-highlight').filter({ hasText: /附件对应的说明|清单\.txt/ })).toBeFocused();
   }
   finally {
     await a.context.close();
