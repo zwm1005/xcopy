@@ -32,6 +32,49 @@ async function slowFileReads(page) {
   });
 }
 
+test('received text and mixed content show accurate notices and retain unread navigation', async ({ browser, baseURL }, testInfo) => {
+  const a = await device(browser, baseURL, '发送电脑');
+  const b = await device(browser, baseURL, '接收电脑');
+  try {
+    await pair(a.page, b.page);
+    await a.page.locator('[data-editor]').fill('文字提醒验收');
+    await a.page.locator('[data-action="send"]').click();
+    const text = b.page.locator('[data-transfer]').filter({ hasText: '文字提醒验收' });
+    await expect(text).toHaveAttribute('data-status', 'completed');
+    await expect(text.locator('.qt-new-marker')).toBeVisible();
+    await expect(b.page.locator('.qt-notice-title')).toHaveText('收到 1 条新文字');
+    await expect(b.page.locator('.qt-notice-description')).not.toContainText('请及时保存');
+    await expect(b.page.locator('[data-notice-control="view"]')).toHaveText('查看内容');
+    await b.page.locator('[data-locale]').selectOption('en');
+    await expect(b.page.locator('.qt-notice-title')).toHaveText('Received 1 item of text');
+    await b.page.locator('[data-locale]').selectOption('zh-CN');
+    await b.page.locator('[data-notice-control="view"]').click();
+    await expect(text).toBeFocused();
+    await b.page.screenshot({ path: testInfo.outputPath('文字接收-定位记录.png'), fullPage: true });
+
+    await b.page.locator('[data-mode="share"]').click();
+    await a.page.locator('[data-editor]').fill('附件对应的说明');
+    await a.page.locator('[data-files]').setInputFiles({
+      name: '清单.txt', mimeType: 'text/plain', buffer: Buffer.from('mixed receipt')
+    });
+    await a.page.locator('[data-action="send"]').click();
+    await expect(b.page.locator('[data-new-file-count]')).toHaveText('2');
+    await expect(b.page.locator('[data-mode="share"]')).toHaveAttribute('aria-selected', 'true');
+    await expect(b.page.locator('.qt-notice-title')).toHaveText('收到 2 项新内容');
+    await expect(b.page.locator('.qt-notice-description')).toContainText('文件已校验，请及时保存');
+    await b.page.screenshot({ path: testInfo.outputPath('文字与文件-接收提醒.png'), fullPage: true });
+    await b.page.locator('[data-locale]').selectOption('en');
+    await expect(b.page.locator('.qt-notice-title')).toHaveText('Received 2 items');
+    await b.page.locator('[data-notice-control="view"]').click();
+    await expect(b.page.locator('[data-mode="device"]')).toHaveAttribute('aria-selected', 'true');
+    await expect(b.page.locator('.qt-record-highlight')).toBeFocused();
+  }
+  finally {
+    await a.context.close();
+    await b.context.close();
+  }
+});
+
 test('verified receipts batch into a light notice, preserve tab isolation and unread files, and link to history', async ({ browser, baseURL }, testInfo) => {
   const a = await device(browser, baseURL, '发送电脑');
   const b = await device(browser, baseURL, '接收电脑');

@@ -55,6 +55,18 @@ test('receipt feedback requires verified completion and is observed only once', 
   assert.deepEqual(feedback.collect([item({ incoming: true, verified: true, status: 'completed', shareId: 'share' })]), []);
 });
 
+test('text receipts notify only after verified completion, just like files', () => {
+  const feedback = new TransferFeedback();
+  const text = item({ kind: 'text', incoming: true, bytes: 100000 });
+  assert.deepEqual(feedback.collect([text], 0), []);
+  assert.equal(feedback.collect([text], 1000)[0]?.kind, 'receiving');
+  text.status = 'completed';
+  assert.deepEqual(feedback.collect([text], 1100), []);
+  text.verified = true;
+  assert.equal(feedback.collect([text], 1200)[0]?.kind, 'received');
+  assert.deepEqual(feedback.collect([text], 1400), []);
+});
+
 test('group success waits for all confirmations, partial results and retries are emitted once', () => {
   const feedback = new TransferFeedback();
   const a = item({ batchId: 'batch', status: 'completed' });

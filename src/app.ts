@@ -266,6 +266,9 @@ function renderTransfer(item: TransferItem) {
     const sourceText = item.source?.kind === 'text' ? item.source.text : undefined;
     if (item.kind === 'text' && (item.text !== undefined || sourceText !== undefined)) {
         body.append(element('pre', 'qt-text-content', item.text ?? sourceText));
+        if (feedback.unread.has(item.localId)) {
+            body.append(element('span', 'qt-new-marker', t('feedback.new')));
+        }
     }
     else {
         const title = element('div', 'qt-transfer-title', item.name);
@@ -794,6 +797,8 @@ async function action(name: string, el: {
                 return;
             }
             await navigator.clipboard.writeText(item.text);
+            feedback.markRead(item);
+            renderTransfers();
             tell(t("app.text.copied"));
             break;
         case 'copy-image':

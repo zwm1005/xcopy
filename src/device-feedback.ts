@@ -56,7 +56,7 @@ export class DeviceFeedback {
       else if (event.kind === 'receiving') {
         notices.push({
           key: `receiving:${item.localId}`, tone: 'info',
-          content: () => ({ title: t('feedback.receiving'), description: `${item.peerName} · ${item.name}`, actionLabel: t('feedback.view') }),
+          content: () => ({ title: t(item.kind === 'text' ? 'feedback.receiving.content' : 'feedback.receiving'), description: `${item.peerName} · ${item.name}`, actionLabel: t('feedback.view') }),
           valid: () => items().includes(item) && activeTransfer(item),
           action: () => this.view([item])
         });
@@ -100,12 +100,17 @@ export class DeviceFeedback {
     if (!items.length) {
       return;
     }
+    const hasFiles = items.some(item => item.kind !== 'text');
+    const hasText = items.some(item => item.kind === 'text');
     this.options.notices.push({
       key: `received:${items[0].localId}`, tone: 'success',
       content: () => ({
-        title: t('feedback.received', { count: items.length }),
-        description: `${t('feedback.received.from', { name: [...new Set(items.map(item => item.peerName))].join('、'), size: sizeLabel(items.reduce((sum, item) => sum + item.size, 0)) })} · ${t('feedback.save.reminder')}`,
-        actionLabel: t('feedback.view.files')
+        title: t(hasText ? hasFiles ? 'feedback.received.content' : 'feedback.received.text' : 'feedback.received', { count: items.length }),
+        description: [
+          t('feedback.received.from', { name: [...new Set(items.map(item => item.peerName))].join('、'), size: sizeLabel(items.reduce((sum, item) => sum + item.size, 0)) }),
+          ...(hasFiles ? [t('feedback.save.reminder')] : [])
+        ].join(' · '),
+        actionLabel: t(hasText ? 'feedback.view.content' : 'feedback.view.files')
       }),
       valid: () => items.some(item => this.options.items().includes(item)),
       action: () => this.view(items)
