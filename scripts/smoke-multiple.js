@@ -109,7 +109,7 @@ async function verify(p, bundle) {
 }
 async function stop(s) {
   s.page.once('dialog', (d) => d.accept());
-  await s.page.getByRole('button', { name: '停止新领取', exact: true }).click();
+  await s.page.getByRole('button', { name: '结束分享', exact: true }).click();
   await expect(s.page.locator('[data-share-panel]')).toContainText('分享已结束');
 }
 try {
@@ -129,7 +129,7 @@ try {
       await pause(Math.min(30000, multiple.expires - 15000 - Date.now()));
     }
     await Promise.all(recipients.map((p) => p.locator('[data-claim]').click()));
-    await expect(multiple.page.locator('.share-counts')).toContainText('3 次传输中 · 1 次排队');
+    await expect(multiple.page.locator('.share-counts')).toHaveText('已领取 0 次');
     await pause(Math.max(0, multiple.expires - Date.now() + 1500));
     await expect(previewSingle.getByRole('heading', { level: 1 })).toHaveText('这份分享已过期');
     await expect(previewSingle.locator('[data-claim]')).toHaveCount(0);
@@ -140,7 +140,7 @@ try {
       await verify(p, files.slice(0, 1));
     }
     await expect(multiple.page.locator('[data-share-panel]')).toContainText('分享已过期');
-    await expect(multiple.page.locator('.share-counts')).toContainText('已完成 4 次');
+    await expect(multiple.page.locator('.share-counts')).toHaveText('已领取 4 次');
     checks.push(`真实等待 ${Math.round((Date.now() - startedAt) / 1000)} 秒：一次领取过期拒绝领取；多人到期拒绝新领取，3 个在传和 1 个排队任务完成且下载字节一致`);
     await multiple.page.screenshot({ path: `${output}/多人真实到期.png`, fullPage: true });
     await previewSingle.screenshot({ path: `${output}/一次领取真实到期.png`, fullPage: true });
@@ -152,9 +152,11 @@ try {
       recipients.push(await recipient(s.url));
     }
     await Promise.all(recipients.map((p) => p.locator('[data-claim]').click()));
-    await expect(s.page.locator('.share-counts')).toContainText('3 次传输中 · 1 次排队');
+    await expect(s.page.locator('.share-counts')).toHaveText('已领取 0 次');
     await expect.poll(() => s.page.evaluate(() => new Set(window.shareAttempts.map((i) => i.claimId)).size)).toBe(3);
     await s.page.locator('[data-share-record]').getByRole('button', { name: '查看详情' }).click();
+    await expect(s.page.locator('[data-claim-state="transferring"]')).toHaveCount(3);
+    await expect(s.page.locator('[data-claim-state="queued"]')).toHaveCount(1);
     await s.page.screenshot({ path: `${output}/多人并发与排队.png`, fullPage: true });
     await s.page.evaluate(() => window.releaseShare());
     for (const p of recipients) {
@@ -167,7 +169,7 @@ try {
       await p.locator('[data-claim]').click();
       await verify(p, bundle);
     }
-    await expect(s.page.locator('.share-counts')).toContainText('已完成 12 次');
+    await expect(s.page.locator('.share-counts')).toHaveText('已领取 12 次');
     await expect(s.page.locator('[data-share-url]')).toHaveValue(s.url);
     checks.push('同一链接完成 12 次领取后仍保持开放，无 5/10 人累计上限');
     for (const width of [1280, 375, 320]) {
@@ -177,7 +179,7 @@ try {
     }
     await stop(s);
     await verify(recipients[0], bundle);
-    checks.push('停止新领取后进入紧凑结束态，已接收文件仍可保存');
+    checks.push('结束分享后进入紧凑结束态，已接收文件仍可保存');
     const retry = await sender('multiple', files, { fail: true });
     const a = await recipient(retry.url);
     const b = await recipient(retry.url);
@@ -193,7 +195,7 @@ try {
     const attempts = await retry.page.evaluate(() => window.shareAttempts);
     expect(attempts.length - before).toBe(1);
     expect(attempts.at(-1).index).toBe(1);
-    await expect(retry.page.locator('.share-counts')).toContainText('已完成 2 次');
+    await expect(retry.page.locator('.share-counts')).toHaveText('已领取 2 次');
     checks.push('对第一个领取者注入一次数据发送失败，第二人不受影响；仅重试失败文件，所有下载字节一致');
     await stop(retry);
   }

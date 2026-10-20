@@ -244,7 +244,7 @@ test('share cancellation, expiry and metadata limits are enforced on the server'
   const sender = await connect('分享者');
   const outsider = await connect('其他设备');
   const a = await guest(connect);
-  for (const files of [[], Array(9).fill(metadata), [{ ...metadata, size: -1 }], [{ ...metadata, size: Number.MAX_SAFE_INTEGER + 1 }], [{ ...metadata, size: 1.5 }]]) {
+  for (const files of [[], Array(11).fill(metadata), [{ ...metadata, size: -1 }], [{ ...metadata, size: Number.MAX_SAFE_INTEGER + 1 }], [{ ...metadata, size: 1.5 }]]) {
     await rejected(sender.rpc('share.create', { files, minutes: 10 }), 'SIZE_LIMIT');
   }
   await rejected(sender.rpc('share.create', { files: [metadata], minutes: 0 }), 'INVALID');
@@ -263,6 +263,23 @@ test('share cancellation, expiry and metadata limits are enforced on the server'
   await rejected(a.rpc('transfer.end', { id: task.id, status: 'completed' }), 'TRANSFER_ENDED');
   assert.equal((await a.rpc('share.inspect', { token: next.token })).status, 'cancelled');
   app.sweep();
+});
+
+test('single and multiple shares accept ten files and reject eleven', async (t) => {
+  const { connect } = await setup(t);
+  const sender = await connect('十文件分享');
+  assert.equal((await sender.rpc('share.list')).maxShareFiles, 10);
+  for (const mode of ['single', 'multiple']) {
+    const options = { mode, minutes: 10, shareProtocol: 2 };
+    await assert.rejects(sender.rpc('share.create', { ...options, files: Array(11).fill(metadata) }), (error) => {
+      assert.equal(error.code, 'SIZE_LIMIT');
+      assert.equal(error.message, '一次分享支持 1–10 个文件');
+      return true;
+    });
+    const share = await sender.rpc('share.create', { ...options, files: Array(10).fill(metadata) });
+    assert.equal(share.files.length, 10);
+    await sender.rpc('share.cancel', { id: share.id });
+  }
 });
 
 test('share retry retains completed files and the original claimant; guests resume without device credentials', async (t) => {

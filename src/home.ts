@@ -46,7 +46,8 @@ function clearTimers() {
     clearTimeout(manualTimer);
 }
 function visible() {
-    return pageActive && onScreen && !document.hidden;
+    const bounds = demo.getBoundingClientRect();
+    return pageActive && onScreen && !document.hidden && bounds.bottom > 0 && bounds.top < innerHeight && bounds.right > 0 && bounds.left < innerWidth;
 }
 function schedule() {
     clearTimeout(timer);
@@ -54,6 +55,10 @@ function schedule() {
         return;
     }
     timer = setTimeout(() => {
+        // Scrolling may precede the asynchronous IntersectionObserver update.
+        if (!visible()) {
+            return;
+        }
         if (phaseIndex === phases.length - 1) {
             typeIndex = (typeIndex + 1) % types.length;
             phaseIndex = 0;

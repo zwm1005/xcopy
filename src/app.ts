@@ -8,7 +8,8 @@ import { query, activeElement } from './dom.js';
 import { errorValue } from './dom.js';
 import { Connection } from './connection.js';
 import { Transfers } from './transfer.js';
-import { ShareComposer, fileLimitLabel } from './share-ui.js';
+import { ShareComposer, renderFileLimitNotice } from './share-ui.js';
+import { MAX_FILES_PER_SEND } from './shared/transfer-limits.js';
 import { deviceNames, validDeviceName } from './device-name.js';
 const root = query<HTMLElement>(document, '#suichuan');
 // 兼容静态发布切换瞬间仍引用新脚本的旧 HTML。
@@ -146,7 +147,7 @@ function updateSend() {
     note.textContent = !connection.ready ? messageText(state.connectionError) : recipients.length && broadcast ? t("app.send.to.all.paired.online.devices") : '';
     note.hidden = shareUI?.mode === 'share' || !note.textContent;
     const limit = get<HTMLElement>('[data-device-file-limit]');
-    limit.textContent = fileLimitLabel(connection.config);
+    renderFileLimitNotice(limit, connection.config);
     limit.hidden = shareUI?.mode === 'share';
     for (const connect of all('[data-action="connect"], [data-action="first-connect"]')) {
         if (connect instanceof HTMLButtonElement) {
@@ -180,8 +181,8 @@ function renderAttachments() {
 }
 function addFiles(files: File[]) {
     for (const file of files) {
-        if (state.files.length >= 8) {
-            tell(t("app.add.up.to.8.files.at.a.time"));
+        if (state.files.length >= MAX_FILES_PER_SEND) {
+            tell(t("app.file.limit.reached", { count: MAX_FILES_PER_SEND }));
             break;
         }
         const preview = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type);

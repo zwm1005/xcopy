@@ -40,7 +40,7 @@ async function holdBytes(page) {
   });
 }
 
-test('群发固定配对名单，18 项有界传输，支持展开结果和切回单发', async ({ browser, baseURL }, testInfo) => {
+test('群发固定配对名单，10 个文件和文字共 22 项有界传输，支持展开结果和切回单发', async ({ browser, baseURL }, testInfo) => {
   const devices = [];
   try {
     for (const name of ['发送电脑', '电脑 B', '电脑 C', '电脑 D']) {
@@ -56,7 +56,7 @@ test('群发固定配对名单，18 项有界传输，支持展开结果和切�
     await a.locator('[data-target]').selectOption('all-online');
     await expect(a.locator('[data-action="send"]')).toHaveAttribute('aria-label', '发送');
     await holdBytes(a);
-    const files = Array.from({ length: 8 }, (_, index) => ({ name: `附件-${index}.bin`, mimeType: 'application/octet-stream', buffer: Buffer.alloc(32768, index + 1) }));
+    const files = Array.from({ length: 10 }, (_, index) => ({ name: `附件-${index}.bin`, mimeType: 'application/octet-stream', buffer: Buffer.alloc(32768, index + 1) }));
     // The attachment button still invokes the real file chooser.
     const chooser = a.waitForEvent('filechooser');
     await a.locator('[data-action="pick"]').click();
@@ -66,7 +66,7 @@ test('群发固定配对名单，18 项有界传输，支持展开结果和切�
     const group = a.locator('[data-group]');
     await expect(group).toHaveCount(1);
     await expect(group.locator('[data-status="transferring"]')).toHaveCount(3);
-    await expect(group.locator('[data-status="queued"]')).toHaveCount(15);
+    await expect(group.locator('[data-status="queued"]')).toHaveCount(19);
     await group.locator('[data-action="toggle-group"]').click();
     await expect(group.locator('[data-group-details]')).toBeVisible();
     await a.locator('[data-action="devices"]').click();
@@ -76,13 +76,13 @@ test('群发固定配对名单，18 项有界传输，支持展开结果和切�
     await expect(a.locator('[data-target]')).toContainText('全部在线设备（3 台）');
     await expect(group.locator('.qt-group-title')).toHaveText('群发 · 2 台设备');
     await a.evaluate(() => window.releaseBatch());
-    await expect(group.locator('[data-status="completed"]')).toHaveCount(18, { timeout: 45000 });
+    await expect(group.locator('[data-status="completed"]')).toHaveCount(22, { timeout: 45000 });
     for (const recipient of [b, c]) {
-      await expect(recipient.locator('[data-status="completed"]')).toHaveCount(9);
+      await expect(recipient.locator('[data-status="completed"]')).toHaveCount(11);
       await expect(recipient.locator('pre')).toHaveText('群发原文\n<script>按文字发送</script>');
       const download = recipient.waitForEvent('download');
-      await recipient.locator('[data-transfer]').filter({ hasText: files[7].name }).locator('[data-action="save-file"]').click();
-      expect(await readFile(await (await download).path())).toEqual(files[7].buffer);
+      await recipient.locator('[data-transfer]').filter({ hasText: files[9].name }).locator('[data-action="save-file"]').click();
+      expect(await readFile(await (await download).path())).toEqual(files[9].buffer);
     }
     await expect(d.locator('[data-transfer]')).toHaveCount(0);
     await expect(group.locator('[data-group-status]')).toContainText('全部送达');
@@ -95,8 +95,8 @@ test('群发固定配对名单，18 项有界传输，支持展开结果和切�
     await a.locator('[data-target]').selectOption({ label: '电脑 C' });
     await a.locator('[data-editor]').fill('只发给 C');
     await a.locator('[data-action="send"]').click();
-    await expect(c.locator('[data-status="completed"]')).toHaveCount(10);
-    await expect(b.locator('[data-status="completed"]')).toHaveCount(9);
+    await expect(c.locator('[data-status="completed"]')).toHaveCount(12);
+    await expect(b.locator('[data-status="completed"]')).toHaveCount(11);
     await expect(d.locator('[data-transfer]')).toHaveCount(0);
     await a.locator('[data-target]').selectOption('all-online');
     await a.reload();

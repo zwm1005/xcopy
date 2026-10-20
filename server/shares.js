@@ -1,4 +1,5 @@
 import { messageDescriptor } from './messages.js';
+import { MAX_FILES_PER_SEND } from '../src/shared/transfer-limits.js';
 import { randomBytes } from 'node:crypto';
 import { WebSocket } from 'ws';
 
@@ -13,7 +14,7 @@ export function createShares({ config, now, requireThat, rate, send, transfers, 
   const tokens = new Map();
   const guests = new Map();
   const online = (ws) => ws?.readyState === WebSocket.OPEN;
-  const limits = { maxShareFiles: 8, maxShareBytes: null, shareProtocol: 2 };
+  const limits = { maxShareFiles: MAX_FILES_PER_SEND, maxShareBytes: null, shareProtocol: 2 };
   const concurrency = config.shareConcurrency ?? 3;
   const queueLimit = config.shareQueueLimit ?? 20;
   const historyLimit = 50;
@@ -257,7 +258,7 @@ export function createShares({ config, now, requireThat, rate, send, transfers, 
       requireThat(mode !== 'multiple' || data.shareProtocol === 2, 'UPDATE_REQUIRED', '请刷新发送页面后创建多人分享');
       requireThat(shares.size < 2000 && ![...shares.values()].some((s) => s.sender === ws && !closed.has(s.status)), 'BUSY', '请先结束当前分享，再创建新的分享');
       requireThat([10, 30, 60].includes(data.minutes), 'INVALID', '请选择有效期');
-      requireThat(Array.isArray(data.files) && data.files.length > 0 && data.files.length <= limits.maxShareFiles, 'SIZE_LIMIT', '一次分享支持 1–8 个文件');
+      requireThat(Array.isArray(data.files) && data.files.length > 0 && data.files.length <= limits.maxShareFiles, 'SIZE_LIMIT', `一次分享支持 1–${MAX_FILES_PER_SEND} 个文件`);
       let totalBytes = 0;
       const files = data.files.map((m) => {
         requireThat(m && Number.isSafeInteger(m.size) && m.size >= 0, 'SIZE_LIMIT', '文件大小无效');
