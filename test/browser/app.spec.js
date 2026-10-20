@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import { readFile, writeFile } from 'node:fs/promises';
 
 async function device(browser, baseURL, name) {

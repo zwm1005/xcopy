@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 test('home opens the existing transfer page without registering a device during the demo', async ({ page }) => {
   const sockets = [];

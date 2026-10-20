@@ -1,3 +1,4 @@
+import { returningVisitor } from './smoke-visitor.js';
 import { chromium, expect as baseExpect } from '@playwright/test';
 import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -23,6 +24,7 @@ const checks = [];
 const hash = (data) => createHash('sha256').update(data).digest('hex');
 async function page() {
   const context = await browser.newContext({ locale: 'zh-CN' });
+  await returningVisitor(context);
   contexts.push(context);
   await context.addInitScript(({ relay }) => {
     window.shareRoutes = [];

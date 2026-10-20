@@ -11,6 +11,7 @@ import { Transfers } from './transfer.js';
 import { progressMetrics, transferredBytes } from './transfer-progress.js';
 import { Notices, locateRecord, preserveRecordLocation } from './notices.js';
 import { DeviceFeedback } from './device-feedback.js';
+import { FirstUseGuide } from './guide.js';
 import { ShareComposer, renderFileLimitNotice } from './share-ui.js';
 import { MAX_FILES_PER_SEND } from './shared/transfer-limits.js';
 import { deviceNames, validDeviceName } from './device-name.js';
@@ -47,9 +48,10 @@ let previewId: string | null;
 let leaveGuardInstalled = false;
 let lastReception: Reception | undefined;
 let shareUI: ShareComposer | undefined;
+let guide: FirstUseGuide | undefined;
 const feedback = new DeviceFeedback({
     root, notices, items: () => transfers.items,
-    visible: () => shareUI?.mode !== 'share' && !state.modal && !imagePreview.open,
+    visible: () => shareUI?.mode !== 'share' && !state.modal && !imagePreview.open && !guide?.active,
     open: () => shareUI?.setMode('device'), changed: () => renderTransfers()
 });
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text?: string) {
@@ -159,8 +161,8 @@ function updateSend() {
             connect.disabled = !connection.ready;
         }
     }
-    get<HTMLElement>('[data-onboarding]').hidden = shareUI?.mode === 'share' || !connection.ready || state.peers.length > 0;
     root.dataset.connection = connection.ready ? 'ready' : 'connecting';
+    guide?.update();
 }
 function renderAttachments() {
     const list = get<HTMLElement>('[data-attachments]');
@@ -196,6 +198,7 @@ function addFiles(files: File[]) {
     renderAttachments();
 }
 function renderTransfers() {
+    guide?.update();
     feedback.update();
     updateLeaveGuard();
     const list = get<HTMLElement>('[data-transfers]');
@@ -469,6 +472,7 @@ function closeDialog() {
     get<HTMLElement>('.qt-header').inert = false;
     get<HTMLElement>('.qt-main').inert = false;
     lastFocus?.focus();
+    guide?.update();
 }
 function renderApproval() {
     const request = state.requests[0];
@@ -481,6 +485,7 @@ function renderApproval() {
     count.textContent = t("app.pending.pairing.requests", { count: state.requests.length });
 }
 function openDialog(type: string) {
+    guide?.finish(false);
     closeImagePreview();
     if (overlay.hidden) {
         lastFocus = activeElement();
@@ -923,7 +928,7 @@ target.addEventListener('change', () => {
 });
 fileInput.addEventListener('change', () => { addFiles([...(fileInput.files || [])]); fileInput.value = ''; });
 root.addEventListener('paste', (event) => {
-    if (state.modal || imagePreview.open) {
+    if (state.modal || imagePreview.open || guide?.active) {
         return;
     }
     const files = [...(event.clipboardData?.files || [])];
@@ -1043,6 +1048,21 @@ shareUI = new ShareComposer({
         }
     }),
     changed: () => { updateSend(); renderTransfers(); }
+});
+guide = new FirstUseGuide(root, {
+    canStart: () => connection.ready && !state.modal && !imagePreview.open && !state.requests.length && !state.sending
+        && !transfers.items.some(isActive) && !shareUI?.busy && !shareUI?.active(),
+    canAutoStart: () => !state.files.length && !editor.value && !transfers.items.length && !shareUI?.entries.length,
+    prepare: () => {
+        const previousMode = shareUI!.mode;
+        const previousSelected = shareUI!.selected;
+        shareUI!.selected = null;
+        return () => {
+            shareUI!.selected = previousSelected;
+            shareUI!.setMode(previousMode);
+        };
+    },
+    setMode: mode => shareUI!.setMode(mode)
 });
 renderTarget();
 renderTransfers();
