@@ -80,6 +80,84 @@ test('live transfer resumes its signaling session and a second tab takes over re
   }
 });
 
+test('queued share recipients receive verified files after the sender reconnects', async ({ browser, baseURL }) => {
+  const sender = await device(browser, baseURL);
+  const guests = [];
+  try {
+    await sender.page.evaluate(async () => {
+      const { Connection } = await import('/connection.js');
+      const { Transfers } = await import('/transfer.js');
+      const rpc = Connection.prototype.rpc;
+      const connect = Connection.prototype.connect;
+      const emit = Connection.prototype.emit;
+      const sendBytes = Transfers.prototype.sendBytes;
+      const gate = new Promise((resolve) => { window.releaseQueueBytes = resolve; });
+      Connection.prototype.rpc = function (type, ...args) {
+        window.queueConnection = this;
+        return rpc.call(this, type, ...args);
+      };
+      Connection.prototype.connect = function () {
+        if (!window.holdQueueReconnect) {
+          return connect.call(this);
+        }
+      };
+      Connection.prototype.emit = function (type, value) {
+        if (type === 'ready') {
+          window.queueResumed = value.resumed;
+        }
+        return emit.call(this, type, value);
+      };
+      Transfers.prototype.sendBytes = async function (item) {
+        window.queueBytesWaiting = (window.queueBytesWaiting || 0) + 1;
+        await gate;
+        return sendBytes.call(this, item);
+      };
+    });
+    await sender.page.getByRole('tab', { name: '链接分享', exact: true }).click();
+    const bytes = Buffer.alloc(128 * 1024, 71);
+    await sender.page.locator('[data-files]').setInputFiles({ name: 'queue-resume.bin', mimeType: 'application/octet-stream', buffer: bytes });
+    await sender.page.locator('[data-share-settings] summary').click();
+    await sender.page.getByRole('radio', { name: '多人领取', exact: true }).check();
+    await sender.page.locator('[data-share-generate]').click();
+    const url = await sender.page.locator('[data-share-url]').inputValue();
+    for (let i = 0; i < 4; i += 1) {
+      const context = await browser.newContext({ locale: 'zh-CN' });
+      const page = await context.newPage();
+      guests.push({ context, page });
+      await page.goto(url);
+      await page.locator('[data-claim]').click();
+    }
+    await expect(sender.page.locator('[data-claim-state="transferring"]')).toHaveCount(3);
+    await expect(sender.page.locator('[data-claim-state="queued"]')).toHaveCount(1);
+    // Wait for all three data channels before disconnecting only signaling.
+    await expect.poll(() => sender.page.evaluate(() => window.queueBytesWaiting)).toBe(3);
+    await sender.page.evaluate(() => {
+      window.holdQueueReconnect = true;
+      window.queueConnection.ws.close();
+    });
+    await expect(sender.page.locator('[data-connection]')).not.toHaveAttribute('data-connection', 'ready');
+    await sender.page.evaluate(() => window.releaseQueueBytes());
+    await Promise.all(guests.slice(0, 3).map(({ page }) =>
+      expect(page.getByRole('heading', { level: 1 })).toHaveText('全部文件接收完成')));
+    await expect(guests[3].page.locator('[data-save-index]')).toHaveCount(0);
+    await sender.page.evaluate(() => {
+      clearTimeout(window.queueConnection.timer);
+      window.holdQueueReconnect = false;
+      window.queueConnection.connect();
+    });
+    await expect.poll(() => sender.page.evaluate(() => window.queueResumed)).toBe(true);
+    await expect(guests[3].page.getByRole('heading', { level: 1 })).toHaveText('全部文件接收完成');
+    await expect(sender.page.locator('[data-claim-state="completed"]')).toHaveCount(4);
+    for (const { page } of guests) {
+      const download = page.waitForEvent('download');
+      await page.locator('[data-save-index="0"]').click();
+      expect(await readFile(await (await download).path())).toEqual(bytes);
+    }
+  } finally {
+    await Promise.all([sender.context.close(), ...guests.map(({ context }) => context.close())]);
+  }
+});
+
 test('completed share downloads survive guest cleanup without an automatic reconnect loop', async ({ browser, baseURL }) => {
   const sender = await device(browser, baseURL);
   const guest = await browser.newContext({ locale: 'zh-CN' });
