@@ -5,6 +5,7 @@ import { t } from './i18n/index.js';
 import type { Attachment, Peer, PairRequest, Reception } from './types/device.js';
 import type { TransferItem, TransferGroup, Source } from './types/transfer.js';
 import { query, activeElement } from './dom.js';
+import { enhanceSelect } from './select.js';
 import { errorValue } from './dom.js';
 import { Connection } from './connection.js';
 import { Transfers } from './transfer.js';
@@ -41,6 +42,7 @@ const editor = get<HTMLTextAreaElement>('[data-editor]');
 const overlay = get<HTMLElement>('.qt-overlay');
 const imagePreview = get<HTMLDialogElement>('[data-image-preview]');
 const target = get<HTMLSelectElement>('[data-target]');
+const targetControl = enhanceSelect(target);
 const fileInput = get<HTMLInputElement>('[data-files]');
 const notices = new Notices(get<HTMLElement>('.qt-toast'));
 let lastFocus: HTMLElement | null;
@@ -143,6 +145,7 @@ function renderTarget() {
         target.value = state.target;
     }
     target.disabled = !online.length || !connection.ready;
+    targetControl?.sync();
     updateSend();
 }
 function updateSend() {

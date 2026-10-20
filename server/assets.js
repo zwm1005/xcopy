@@ -1,7 +1,7 @@
 // Explicit public URLs; never derive permissions from an arbitrary request path.
 export const assets = new Set([
   '/index.html', '/transfer.html', '/share.html', '/home.css', '/styles.css', '/share.css', '/i18n.css',
-  '/icon.svg', '/qrcode.js', '/QRCODE-LICENSE.txt', '/analytics.js',
+  '/icon.svg', '/qrcode.js', '/QRCODE-LICENSE.txt', '/analytics.js', '/select.js',
   ...['app', 'home', 'identity', 'device-name', 'archive', 'connection', 'transfer', 'transfer-progress', 'transfer-feedback', 'device-feedback', 'notices', 'guide', 'share', 'share-ui', 'dom', 'protocol-runtime'].map((name) => `/${name}.js`),
   '/shared/device-name.js', '/shared/transfer-limits.js',
   ...['index', 'messages', 'format', 'zh-CN', 'en', 'errors'].map((name) => `/i18n/${name}.js`),

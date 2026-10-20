@@ -1,6 +1,7 @@
 import zh from './zh-CN.js';
 import en from './en.js';
 import { isMessageKey } from './messages.js';
+import { enhanceSelect, syncSelect } from '../select.js';
 import type { MessageArgs, MessageKey, MessageParams } from './messages.js';
 export type Locale = 'zh-CN' | 'en';
 export interface ClientConfig { defaultLocale: Locale; supportedLocales: Locale[]; cliDownloadUrl: string | null }
@@ -59,6 +60,8 @@ export function setLocale(next: Locale, persist = true): void {
   applyTranslations();
   for (const select of document.querySelectorAll<HTMLSelectElement>('[data-locale]')) {
     select.value = locale;
+    select.setAttribute('aria-label', translate('language.label'));
+    syncSelect(select);
   }
   document.querySelector('meta[property="og:locale"]')?.setAttribute('content', locale === 'en' ? 'en_US' : 'zh_CN');
   const alternate = document.querySelector<HTMLLinkElement>(`link[rel="alternate"][hreflang="${locale}"]`);
@@ -103,6 +106,7 @@ export async function initI18n(): Promise<void> {
   setLocale(chooseLocale(new URL(location.href).searchParams.get('lang'), saved, browserLanguage), false);
   for (const select of document.querySelectorAll<HTMLSelectElement>('[data-locale]')) {
     select.addEventListener('change', () => setLocale(normalizeLocale(select.value) || 'en'));
+    enhanceSelect(select);
   }
   for (const link of document.querySelectorAll<HTMLAnchorElement>('[data-cli-download]')) {
     link.hidden = !config.cliDownloadUrl;
