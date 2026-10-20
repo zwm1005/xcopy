@@ -18,6 +18,7 @@ async function device(name) {
   const context = await browser.newContext({ locale: 'zh-CN' });
   contexts.push(context);
   await context.addInitScript(({ relay }) => {
+    localStorage.setItem('suichuan-locale', 'zh-CN');
     const PeerConnection = window.RTCPeerConnection;
     window.deploymentIceConfigs = [];
     window.RTCPeerConnection = class extends PeerConnection {
@@ -38,6 +39,19 @@ async function device(name) {
   await page.getByRole('link', { name: '开始传输', exact: true }).click();
   await expect(page).toHaveURL(`${origin}/transfer`);
   await expect(page.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready', { timeout: 20000 });
+  await expect(page.locator('[data-guide]')).toBeVisible();
+  await page.locator('[data-guide-next]').click();
+  const card = await page.locator('.qt-guide-card').boundingBox();
+  const next = await page.locator('[data-guide-next]').boundingBox();
+  await page.locator('[data-guide-next]').click();
+  expect(await page.locator('.qt-guide-card').boundingBox()).toEqual(card);
+  expect(await page.locator('[data-guide-next]').boundingBox()).toEqual(next);
+  await page.locator('[data-guide-next]').click();
+  await expect(page.locator('[data-guide]')).toBeHidden();
+  await expect(page.locator('[data-target] option:checked')).toHaveText('请先添加设备');
+  await page.reload();
+  await expect(page.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready');
+  await expect(page.locator('[data-guide]')).toBeHidden();
   await page.locator('[data-action="devices"]').click();
   await page.locator('[data-name-input]').fill(name);
   await page.locator('[data-action="rename"]').click();

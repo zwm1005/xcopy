@@ -1,9 +1,11 @@
+import { returningVisitor } from './smoke-visitor.js';
 import { chromium, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 
 async function device(browser, baseURL, name) {
   const context = await browser.newContext({ locale: 'zh-CN' });
+  await returningVisitor(context);
   const page = await context.newPage();
   await page.goto(new URL('/transfer', baseURL).href);
   await expect(page.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready');
@@ -52,6 +54,7 @@ try {
     const proxy = {
       async newContext() {
         const context = await browser.newContext({ locale: 'zh-CN' });
+        await returningVisitor(context);
         if (forceRelay) {
           await context.addInitScript(() => {
             const RTC = window.RTCPeerConnection;

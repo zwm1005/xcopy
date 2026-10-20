@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import { readFile } from 'node:fs/promises';
 
 async function device(browser, baseURL, name, init) {
@@ -64,7 +64,8 @@ async function fixtureImage(page, mime) {
 test('首次连接引导、名称校验和记忆，窄屏保持可用', async ({ page }, testInfo) => {
   await page.goto('/transfer');
   await expect(page.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready');
-  await expect(page.getByRole('region', { name: '首次连接引导' })).toBeVisible();
+  await expect(page.locator('[data-onboarding]')).toHaveCount(0);
+  await expect(page.locator('[data-target] option:checked')).toHaveText('请先添加设备');
   await expect(page.getByRole('button', { name: '发送', exact: true })).toBeDisabled();
   for (const width of [1280, 320]) {
     await page.setViewportSize({ width, height: 900 });
@@ -72,7 +73,7 @@ test('首次连接引导、名称校验和记忆，窄屏保持可用', async ({
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`首次连接-${width}.png`), fullPage: true });
   }
-  await page.getByRole('button', { name: '连接第一台设备' }).click();
+  await page.locator('[data-action="connect"]').click();
   await expect(page.getByRole('heading', { name: '给这台设备起个名字' })).toBeVisible();
   await expect(page.locator('[data-code]')).toBeHidden();
   await page.getByRole('textbox', { name: '本机名称' }).fill('   ');

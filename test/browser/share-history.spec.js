@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import { writeFile, rm } from 'node:fs/promises';
 
 test('share history loads older pages in order without duplicates after resumption', async ({ browser, baseURL }) => {

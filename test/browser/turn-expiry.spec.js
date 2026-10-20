@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 import { readFile } from 'node:fs/promises';
 
 test('forced TURN browser transfer crosses credential expiry and reconnects signaling', async ({ browser, baseURL }) => {

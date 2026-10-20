@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures.js';
 
 async function device(browser, baseURL, name) {
   const context = await browser.newContext({ locale: 'zh-CN' });
