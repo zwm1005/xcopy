@@ -43,6 +43,11 @@ export function loadConfig(env = process.env) {
     throw new Error('DEFAULT_LOCALE must be zh-CN or en');
   }
   const indexnowKey = env.INDEXNOW_KEY || '';
+  const analyticsEnabled = boolean(env, 'ANALYTICS_ENABLED');
+  const analyticsPath = env.ANALYTICS_PATH || '/api/analytics';
+  if (!/^\/(?!\/)[a-zA-Z0-9/_-]+$/.test(analyticsPath) || analyticsPath.endsWith('/')) {
+    throw new Error('ANALYTICS_PATH must be a same-origin path without a trailing slash');
+  }
   if (indexnowKey && !/^[a-zA-Z0-9-]{8,128}$/.test(indexnowKey)) {
     throw new Error('INDEXNOW_KEY must be 8–128 ASCII letters, digits or hyphens');
   }
@@ -66,7 +71,7 @@ export function loadConfig(env = process.env) {
     shareGlobalClaims: Math.floor(number(env, 'SHARE_GLOBAL_CLAIMS', 256, 3, 2000)),
     shareWatcherLimit: Math.floor(number(env, 'SHARE_WATCHER_LIMIT', 200, 1, 1000)),
     joinLimit: 5, joinGlobalLimit: number(env, 'PAIR_GLOBAL_LIMIT', 100, 1, 10000),
-    turnUrls, turnSecret, turnAuthMode, turnUsername, turnPassword, stunUrls, forceRelay, defaultLocale, cliDownloadUrl, indexnowKey,
+    turnUrls, turnSecret, turnAuthMode, turnUsername, turnPassword, stunUrls, forceRelay, defaultLocale, cliDownloadUrl, indexnowKey, analyticsEnabled, analyticsPath,
     turnCredentialTtlSeconds: number(env, 'TURN_CREDENTIAL_TTL_SECONDS', 3600, 3600, 86400)
   };
 }

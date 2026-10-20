@@ -53,6 +53,12 @@ docker compose up -d --build
 
 This starts the app and Caddy, which manages HTTPS. See the [deployment guide (Chinese)](CONTRIBUTING.md#部署与发布) for bundled coturn, systemd / Nginx and configuration updates.
 
+## Optional analytics
+
+Analytics is disabled by default (`ANALYTICS_ENABLED=0`): no analytics script, collection requests, or analytics cookies. Self-hosted installations never connect to the author's analytics service.
+
+Operators may connect their own `wf-admin-web` backend, MySQL database and same-origin reverse proxy, then explicitly enable both deployments. See [configuration and retention](CONTRIBUTING.md#可选访问统计). Collection failures do not block transfers.
+
 ## Before you transfer
 
 - Both devices must be online. Keep the sending page open while sharing. Refreshing or closing a page clears its history and unsaved received content. Offline delivery and resuming across reloads are not supported.

@@ -53,6 +53,12 @@ docker compose up -d --build
 
 默认启动应用和 Caddy，由 Caddy 管理 HTTPS。需要同时部署 coturn，或使用 systemd / Nginx，见[部署与发布](CONTRIBUTING.md#部署与发布)。
 
+## 可选访问统计
+
+默认 `ANALYTICS_ENABLED=0`，不加载统计脚本、不请求采集接口、不创建统计 Cookie。开源自部署不会连接作者的统计服务。
+
+需要 PV / UV、访问来源与 IP 明细时，可自行配置 `wf-admin-web` 管理后端、MySQL 和同源反向代理，再显式开启网站与 Java 两侧开关。启用方式、字段及保留期限见[可选访问统计](CONTRIBUTING.md#可选访问统计)。
+
 ## 使用须知
 
 - 双方需要在线，分享期间发送页须保持打开。网页刷新或关闭会清空传输记录和未保存的接收内容；不支持离线投递或跨刷新续传。

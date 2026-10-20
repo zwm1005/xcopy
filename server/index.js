@@ -1,4 +1,5 @@
 import { assets } from './assets.js';
+import { analyticsMarkup, analyticsPrivacy } from './analytics.js';
 import { discovery, pageMetadata } from './discovery.js';
 import { pageLocale } from './page-html.js';
 import { messageDescriptor } from './messages.js';
@@ -387,6 +388,15 @@ export function createApp(overrides = {}) {
       res.writeHead(200, { 'Content-Type': 'application/json' }).end('{"ok":true}');
       return;
     }
+    if (path === '/analytics-privacy' && config.analyticsEnabled) {
+      res.setHeader('X-Robots-Tag', 'noindex, follow');
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(req.method === 'HEAD' ? undefined : analyticsPrivacy(config, req.url));
+      return;
+    }
+    if (path === '/analytics.js' && !config.analyticsEnabled) {
+      res.writeHead(404).end('Not found');
+      return;
+    }
     if (path === '/api/client-config') {
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' }).end(req.method === 'HEAD' ? undefined : JSON.stringify({ defaultLocale: config.defaultLocale, supportedLocales: ['zh-CN', 'en'], cliDownloadUrl: config.cliDownloadUrl || null }));
       return;
@@ -410,7 +420,7 @@ export function createApp(overrides = {}) {
       if (['/transfer.html', '/share.html'].includes(file)) {
         res.setHeader('X-Robots-Tag', file === '/share.html' ? 'noindex, nofollow' : 'noindex, follow');
       }
-      res.writeHead(200, { 'Content-Type': mimeTypes[extname(file)] || 'text/plain; charset=utf-8' }).end(req.method === 'HEAD' ? undefined : pageMetadata(content, file, config, req.url));
+      res.writeHead(200, { 'Content-Type': mimeTypes[extname(file)] || 'text/plain; charset=utf-8' }).end(req.method === 'HEAD' ? undefined : analyticsMarkup(pageMetadata(content, file, config, req.url), file, config));
     } catch {
       res.writeHead(500).end('Service unavailable');
     }
