@@ -579,10 +579,10 @@ export class Transfers extends EventTarget {
             this.endRemote(item.id, 'cancelled');
         }
     }
-    clear() {
+    clear(matches: (item: TransferItem) => boolean = () => true) {
         const activeGroups = new Set(this.items.filter((item) => item.groupId && !ended.has(item.status)).map((item) => item.groupId));
         this.items = this.items.filter((item) => {
-            if (item.shareOpen || !ended.has(item.status) || activeGroups.has(item.groupId)) {
+            if (!matches(item) || item.shareOpen || !ended.has(item.status) || activeGroups.has(item.groupId)) {
                 return true;
             }
             if (item.url) {
@@ -591,7 +591,7 @@ export class Transfers extends EventTarget {
             this.byId.delete(item.id || '');
             return false;
         });
-        this.groups = this.groups.filter((group) => activeGroups.has(group.id));
+        this.groups = this.groups.filter((group) => this.items.some((item) => item.groupId === group.id));
         this.queue = this.queue.filter((item) => item.status === 'queued');
         this.changed(true);
     }

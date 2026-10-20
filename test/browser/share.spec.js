@@ -473,6 +473,8 @@ test('completed sharing becomes a compact result; history details stay inline wh
     await expect(link).toHaveValue(newUrl);
     await expect(s.page.locator('.share-qr')).toBeVisible();
     await s.page.getByRole('tab', { name: '发送给设备', exact: true }).click();
+    await expect(s.page.locator('[data-share-records]')).toBeHidden();
+    await s.page.getByRole('tab', { name: '链接分享', exact: true }).click();
     await s.page.locator('[data-share-record][data-status="ready"]').getByRole('button', { name: '查看分享' }).click();
     await expect(link).toHaveValue(newUrl);
     await expect(panel.getByRole('button', { name: '复制链接', exact: true })).toBeFocused();
@@ -513,7 +515,7 @@ async function holdShare(senderPage) {
   });
 }
 
-test('share history aligns with both composers and details separate shared files from receiving devices', async ({ browser, baseURL }, testInfo) => {
+test('share history aligns with its composer and details separate shared files from receiving devices', async ({ browser, baseURL }, testInfo) => {
   const s = await sender(browser, baseURL, files, 'multiple');
   try {
     const record = s.page.locator('[data-share-record]');
@@ -527,20 +529,21 @@ test('share history aligns with both composers and details separate shared files
     for (const [width, scheme] of [[1280, 'light'], [768, 'light'], [375, 'light'], [320, 'dark']]) {
       await s.page.setViewportSize({ width, height: 900 });
       await s.page.emulateMedia({ colorScheme: scheme, reducedMotion: 'reduce' });
-      for (const [mode, composer] of [['发送给设备', '.qt-composer'], ['链接分享', '[data-share-panel]']]) {
-        await s.page.getByRole('tab', { name: mode, exact: true }).click();
-        const area = await s.page.locator(composer).boundingBox();
-        const card = await record.boundingBox();
-        const heading = await s.page.locator('.qt-section-heading').boundingBox();
-        const title = await s.page.locator('.qt-section-heading h2 > span').first().boundingBox();
-        expect(card.x).toBeCloseTo(area.x, 1);
-        expect(card.width).toBeCloseTo(area.width, 1);
-        expect(heading.x).toBeCloseTo(area.x, 1);
-        expect(title.x).toBeCloseTo(area.x, 1);
-        await expect(sharedFiles).toBeVisible();
-        await expect(devices).toBeVisible();
-        expect(await s.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-      }
+      await s.page.getByRole('tab', { name: '发送给设备', exact: true }).click();
+      await expect(record).toBeHidden();
+      await expect(s.page.locator('.qt-transfers')).toBeHidden();
+      await s.page.getByRole('tab', { name: '链接分享', exact: true }).click();
+      const area = await s.page.locator('[data-share-panel]').boundingBox();
+      const card = await record.boundingBox();
+      const heading = await s.page.locator('.qt-section-heading').boundingBox();
+      const title = await s.page.locator('.qt-section-heading h2 > span').first().boundingBox();
+      expect(card.x).toBeCloseTo(area.x, 1);
+      expect(card.width).toBeCloseTo(area.width, 1);
+      expect(heading.x).toBeCloseTo(area.x, 1);
+      expect(title.x).toBeCloseTo(area.x, 1);
+      await expect(sharedFiles).toBeVisible();
+      await expect(devices).toBeVisible();
+      expect(await s.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await record.screenshot({ path: testInfo.outputPath(`分享详情-空领取设备-${width}-${scheme}.png`) });
     }
     await s.page.locator('[data-locale]').selectOption('en');
@@ -578,6 +581,8 @@ test('viewing the current multiple share gives visible feedback even when the pa
       await s.page.setViewportSize({ width, height: 600 });
       await s.page.emulateMedia({ colorScheme: scheme, reducedMotion });
       await s.page.getByRole('tab', { name: '发送给设备', exact: true }).click();
+      await expect(view).toBeHidden();
+      await s.page.getByRole('tab', { name: '链接分享', exact: true }).click();
       await view.click();
       await expect(s.page.getByRole('tab', { name: '链接分享', exact: true })).toHaveAttribute('aria-selected', 'true');
       await expect(copy).toBeFocused();
