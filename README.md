@@ -9,7 +9,7 @@ Send text, screenshots and files between devices. Open it in your browser, no ac
 - **Device transfers** — Reuse a connection code for multiple devices within its 10-minute lifetime, approving each device individually. Drag files, paste screenshots and send to multiple devices.
 - **Share links** — Share by link or QR code, with single or multiple recipients and ZIP downloads on the receiving end.
 - **Direct connections and relays** — WebRTC prefers direct connections and supports your own STUN / TURN services.
-- **Browser and CLI** — English by default, with a Chinese interface and a Go CLI for devices without a desktop.
+- **Browser and CLI** — Chinese for browsers whose preferred language is Chinese, English otherwise; manual language choices are remembered. A Go CLI supports devices without a desktop.
 
 ## Quick start
 

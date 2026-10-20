@@ -16,8 +16,8 @@ export function normalizeLocale(value: string | null | undefined): Locale | unde
   }
   return undefined;
 }
-export function chooseLocale(url: string | null, saved: string | null, fallback: string): Locale {
-  return normalizeLocale(url) || normalizeLocale(saved) || normalizeLocale(fallback) || 'en';
+export function chooseLocale(url: string | null, saved: string | null, browserLanguage: string): Locale {
+  return normalizeLocale(url) || normalizeLocale(saved) || normalizeLocale(browserLanguage) || 'en';
 }
 export function translate(key: string, params: MessageParams = {}): string {
   if (!isMessageKey(key)) {
@@ -99,7 +99,8 @@ export async function initI18n(): Promise<void> {
   try {
     saved = localStorage.getItem('suichuan-locale');
   } catch { /* Locale persistence is optional. */ }
-  setLocale(chooseLocale(new URL(location.href).searchParams.get('lang'), saved, config.defaultLocale), false);
+  const browserLanguage = navigator.languages?.[0] || navigator.language;
+  setLocale(chooseLocale(new URL(location.href).searchParams.get('lang'), saved, browserLanguage), false);
   for (const select of document.querySelectorAll<HTMLSelectElement>('[data-locale]')) {
     select.addEventListener('change', () => setLocale(normalizeLocale(select.value) || 'en'));
   }
