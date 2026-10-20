@@ -9,8 +9,8 @@ export function analyticsMarkup(content, file, config) {
     .replace('</body>', '<a class="analytics-privacy-link" href="/analytics-privacy">Statistics / 访问统计</a></body>');
 }
 
-export function analyticsPrivacy(config, requestUrl) {
-  const zh = pageLocale(requestUrl, config) === 'zh-CN';
+export function analyticsPrivacy(config, requestUrl, acceptLanguage = '') {
+  const zh = pageLocale(requestUrl, config, acceptLanguage) === 'zh-CN';
   const title = zh ? '本站访问统计' : 'Site statistics';
   const description = zh
     ? '本站已由部署者开启访问统计。统计页面浏览、匿名浏览器标识、来源域名、浏览器和系统，以及 IP 推断的地区。原始 IP 最多保留 30 天，访问明细保留 90 天，日汇总保留 13 个月。统计不包含传输文字、剪贴板、文件名、文件内容或分享令牌。'

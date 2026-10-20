@@ -21,24 +21,25 @@ async function pair(a, b) {
   await expect(b.locator('.qt-overlay')).toBeHidden();
 }
 
-test('English default overrides browser language while explicit choices, blocked storage and missing config remain usable', async ({ browser, baseURL }) => {
+test('browser language selects the default while explicit choices, blocked storage and missing config remain usable', async ({ browser, baseURL }) => {
   const context = await browser.newContext({ locale: 'zh-CN' });
   const page = await context.newPage();
   await page.route('**/api/client-config', route => route.fulfill({ json: { defaultLocale: 'en', supportedLocales: ['zh-CN', 'en'], cliDownloadUrl: null } }));
   try {
     await page.goto(baseURL);
-    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-    await expect(page.getByRole('link', { name: 'Start transferring' })).toBeVisible();
-    await expect(page.locator('[data-cli-download]:visible')).toHaveCount(0);
-    await page.getByRole('link', { name: 'Start transferring', exact: true }).click();
-    await expect(page.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready');
-    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-    await page.goto(baseURL);
-    await page.locator('[data-locale]').selectOption('zh-CN');
-    await page.reload();
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
-    await page.goto(`${baseURL}/?lang=en`);
+    await expect(page.getByRole('link', { name: '开始传输', exact: true })).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('suichuan-locale'))).toBeNull();
+    await expect(page.locator('[data-cli-download]:visible')).toHaveCount(0);
+    await page.getByRole('link', { name: '开始传输', exact: true }).click();
+    await expect(page.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
+    await page.goto(baseURL);
+    await page.locator('[data-locale]').selectOption('en');
+    await page.reload();
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    await page.goto(`${baseURL}/?lang=zh-CN`);
+    await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
     await page.setViewportSize({ width: 320, height: 850 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   } finally {
@@ -50,8 +51,8 @@ test('English default overrides browser language while explicit choices, blocked
   await fallback.route('**/api/client-config', route => route.abort());
   try {
     await fallback.goto(baseURL);
-    await expect(fallback.locator('html')).toHaveAttribute('lang', 'en');
-    await expect(fallback.getByRole('link', { name: 'Start transferring', exact: true })).toBeVisible();
+    await expect(fallback.locator('html')).toHaveAttribute('lang', 'zh-CN');
+    await expect(fallback.getByRole('link', { name: '开始传输', exact: true })).toBeVisible();
     await expect(fallback.locator('[data-demo-send]')).toBeVisible();
     await ready(fallback, baseURL);
     await expect(fallback.locator('html')).toHaveAttribute('lang', 'en');
@@ -61,6 +62,34 @@ test('English default overrides browser language while explicit choices, blocked
     await blocked.close();
   }
 });
+
+for (const [browserLanguage, expected] of [['zh-CN', 'zh-CN'], ['zh-TW', 'zh-CN'], ['zh-HK', 'zh-CN'], ['en-US', 'en'], ['ja-JP', 'en'], ['fr-FR', 'en']]) {
+  test(`browser ${browserLanguage} receives ${expected} on all pages before and after JavaScript`, async ({ browser, baseURL }) => {
+    const context = await browser.newContext({ locale: browserLanguage });
+    if (browserLanguage === 'fr-FR') {
+      await context.addInitScript(() => Object.defineProperty(navigator, 'languages', { get: () => ['fr-FR', 'zh-CN'] }));
+    }
+    try {
+      const page = await context.newPage();
+      // The server default and config request must not override the browser.
+      await page.route('**/api/client-config', route => route.fulfill({ json: { defaultLocale: expected === 'en' ? 'zh-CN' : 'en', supportedLocales: ['zh-CN', 'en'], cliDownloadUrl: null } }));
+      for (const path of ['/', '/transfer', '/s']) {
+        const response = await page.goto(baseURL + path);
+        expect(response.headers()['content-language']).toBe(expected);
+        expect(response.headers().vary).toContain('Accept-Language');
+        expect(await response.text()).toContain(`<html lang="${expected}">`);
+        await expect(page.locator('html')).toHaveAttribute('lang', expected);
+        await expect(page.locator('[data-locale]')).toHaveValue(expected);
+        expect(await page.evaluate(() => localStorage.getItem('suichuan-locale'))).toBeNull();
+      }
+      await page.locator('[data-locale]').selectOption(expected === 'en' ? 'zh-CN' : 'en');
+      await page.goto(baseURL + '/transfer');
+      await expect(page.locator('html')).toHaveAttribute('lang', expected === 'en' ? 'zh-CN' : 'en');
+    } finally {
+      await context.close();
+    }
+  });
+}
 
 test('initial HTML contains the selected language and search metadata without JavaScript', async ({ browser, baseURL }) => {
   const context = await browser.newContext({ locale: 'zh-CN', javaScriptEnabled: false });
