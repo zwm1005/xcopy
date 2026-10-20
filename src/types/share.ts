@@ -24,4 +24,5 @@ export interface ShareComposerOptions {
   files: () => Attachment[]; pick: () => void; remove: (id: string) => void;
   consumeFiles: (ids: string[]) => void; addFiles: (files: File[]) => void;
   tell: (message: string) => void; changed: () => void;
+  received?: (entry: ShareEntry, claim?: Claim) => void;
 }

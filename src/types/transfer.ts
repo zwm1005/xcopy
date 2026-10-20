@@ -11,7 +11,8 @@ export interface IncrementalHash { update(data: Uint8Array): IncrementalHash; di
 export interface TransferItem extends Metadata {
   shareIndex: number; shareAttempt?: number; localId: string; id?: string; status: TransferStatus; bytes: number; activity: number;
   route: '' | 'direct' | 'relay'; chunks: ArrayBuffer[]; parts: Blob[]; candidates: RTCIceCandidateInit[];
-  incoming: boolean; peerId: string; peerName: string; groupId?: string; sourceIndex: number;
+  incoming: boolean; peerId: string; peerName: string; groupId?: string; batchId?: string; sourceIndex: number;
+  speed?: number; stalled?: boolean;
   shareOpen?: boolean; starting?: boolean; lastPulseBytes?: number;
   source?: Source | null; blob?: Blob | null; text?: string; reason: string; reasonKey?: string; reasonParams?: Record<string, string | number>;
   iceServers?: RTCIceServer[]; forceRelay?: boolean; directOnly?: boolean; maxRelayFileBytes?: number;

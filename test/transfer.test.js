@@ -148,6 +148,21 @@ test('offline or revoked targets fail queued work without blocking other recipie
   assert.equal(connection.starts.filter(call => call.peerId === 'b').length, 2);
 });
 
+test('clearing a partially delivered single-device batch preserves its completion summary', async (t) => {
+  const { transfers } = setup(t);
+  transfers.sendBatch([peers[0]], sources.slice(0, 2));
+  await settle();
+  const first = transfers.items[0];
+  const second = transfers.items[1];
+  assert.equal(first.batchId, second.batchId);
+  await complete(transfers, first);
+  transfers.clear();
+  assert.equal(transfers.items.length, 2);
+  transfers.fail(second, 'Test failure');
+  transfers.retry(second);
+  assert.equal(transfers.items.find(item => item.localId === second.localId).batchId, first.batchId);
+});
+
 test('queued work survives long waits and reconnect without being mistaken for a lost remote task', async (t) => {
   t.mock.timers.enable({ apis: ['setInterval'] });
   const { connection, transfers } = setup(t);

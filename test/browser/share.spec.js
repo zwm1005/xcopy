@@ -626,11 +626,12 @@ test('ending a multiple share cancels active and queued claims while keeping its
     await expect(record.locator('[data-claim-state="transferring"]')).toHaveCount(3);
     await expect(record.locator('[data-claim-state="queued"]')).toHaveCount(1);
     const devices = record.getByRole('region', { name: '领取设备', exact: true });
-    await expect(devices.locator('[data-claim-state="transferring"] .share-claim-status')).toHaveText(['领取中', '领取中', '领取中']);
+    await expect(devices.locator('[data-claim-state="transferring"] .share-claim-status')).toHaveText(['0%', '0%', '0%']);
     await expect(devices.locator('[data-claim-state="queued"] .share-claim-status')).toHaveText('等待领取');
     await expect(devices).toContainText('已领取 0 次');
     await expect(devices).not.toContainText(/前面\s*\d+|\d+\s*次(?:传输中|排队)/);
-    await expect(devices.locator('progress')).toHaveCount(0);
+    await expect(devices.locator('[data-claim-state="transferring"] progress')).toHaveCount(3);
+    await expect(devices.locator('[data-claim-state="queued"] progress')).toHaveCount(0);
     await expect(record.locator('.share-counts')).toHaveText('已领取 0 次');
     const panel = s.page.locator('[data-share-panel]');
     const end = panel.getByRole('button', { name: '结束分享', exact: true });

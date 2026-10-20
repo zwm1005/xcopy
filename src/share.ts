@@ -8,6 +8,7 @@ import { query, activeElement } from './dom.js';
 import { errorValue } from './dom.js';
 import { Connection } from './connection.js';
 import { Transfers } from './transfer.js';
+import { Notices, locateRecord, preserveRecordLocation } from './notices.js';
 import { el, action, fileList, sizeLabel, progressNode, saveBlob } from './share-ui.js';
 import { archive } from './archive.js';
 import { deviceNames } from './device-name.js';
@@ -22,14 +23,11 @@ let archiveBusy = false;
 let editingName = false;
 let nameDraft = '';
 let nameError = '';
-let toastTimer: ReturnType<typeof setTimeout>;
+const notices = new Notices(query<HTMLElement>(document, '.qt-toast'));
+const completedNotices = new Set<string>();
 const saved = new Set<number>();
 function tell(message: string) {
-    const toast = query(document, '.qt-toast');
-    clearTimeout(toastTimer);
-    toast.textContent = messageText(message);
-    toast.hidden = false;
-    toastTimer = setTimeout(() => { toast.hidden = true; }, 5000);
+    notices.message(message);
 }
 function latest() {
     const byIndex = new Map<number, TransferItem>();
@@ -139,6 +137,7 @@ function nameControl() {
     return row;
 }
 function render() {
+    const restoreLocation = preserveRecordLocation(root);
     const focused = root.contains(activeElement()) ? activeElement()?.dataset.control : null;
     const focusedInput = activeElement();
     const selection: [
@@ -210,6 +209,15 @@ function render() {
         panel.append(list);
     }
     if (complete) {
+        const key = current.myClaim?.id || current.id;
+        if (!completedNotices.has(key)) {
+            completedNotices.add(key);
+            notices.push({
+                key: `received:${key}`, tone: 'success',
+                content: () => ({ title: t('feedback.received', { count: current.files.length }), description: t('feedback.save.reminder'), actionLabel: t('feedback.view.files') }),
+                action: () => locateRecord(root.querySelector<HTMLElement>('.share-panel'))
+            });
+        }
         if (current.files.length > 1) {
             const all = action(archiveBusy ? t("share.creating.zip") : t("share.save.all.as.zip.zip"), async () => {
                 archiveBusy = true;
@@ -289,6 +297,7 @@ function render() {
         panel.append(feedback);
     }
     root.append(panel, el('p', 'share-message', t("share.no.sign.in.or.pairing.files.come.directly")));
+    restoreLocation();
     if (focused) {
         [...root.querySelectorAll<HTMLElement>('[data-control]')].find((n) => n.dataset.control === focused)?.focus({ preventScroll: true });
         const input = activeElement();
@@ -349,7 +358,7 @@ else {
 onLocaleChange(() => { render(); refreshMessages(); });
 
 function refreshMessages() {
-  for (const element of document.querySelectorAll<HTMLElement>('.qt-toast, .qt-input-error, .share-feedback')) {
+  for (const element of document.querySelectorAll<HTMLElement>('.qt-input-error, .share-feedback')) {
     if (element.textContent) {
       element.textContent = messageText(element.textContent);
     }
