@@ -8,6 +8,9 @@ import { query, activeElement } from './dom.js';
 import { errorValue } from './dom.js';
 import { Connection } from './connection.js';
 import { Transfers } from './transfer.js';
+import { progressMetrics, transferredBytes } from './transfer-progress.js';
+import { Notices, locateRecord, preserveRecordLocation } from './notices.js';
+import { DeviceFeedback } from './device-feedback.js';
 import { ShareComposer, renderFileLimitNotice } from './share-ui.js';
 import { MAX_FILES_PER_SEND } from './shared/transfer-limits.js';
 import { deviceNames, validDeviceName } from './device-name.js';
@@ -38,12 +41,17 @@ const overlay = get<HTMLElement>('.qt-overlay');
 const imagePreview = get<HTMLDialogElement>('[data-image-preview]');
 const target = get<HTMLSelectElement>('[data-target]');
 const fileInput = get<HTMLInputElement>('[data-files]');
-let toastTimer: ReturnType<typeof setTimeout>;
+const notices = new Notices(get<HTMLElement>('.qt-toast'));
 let lastFocus: HTMLElement | null;
 let previewId: string | null;
 let leaveGuardInstalled = false;
 let lastReception: Reception | undefined;
 let shareUI: ShareComposer | undefined;
+const feedback = new DeviceFeedback({
+    root, notices, items: () => transfers.items,
+    visible: () => shareUI?.mode !== 'share' && !state.modal && !imagePreview.open,
+    open: () => shareUI?.setMode('device'), changed: () => renderTransfers()
+});
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text?: string) {
     const el = document.createElement(tag);
     el.className = className || '';
@@ -62,10 +70,7 @@ function button(label: string, action: string, id?: string, extra = '') {
     return el;
 }
 function tell(message: string) {
-    clearTimeout(toastTimer);
-    get<HTMLElement>('.qt-toast').textContent = messageText(message);
-    get<HTMLElement>('.qt-toast').hidden = false;
-    toastTimer = setTimeout(() => { get<HTMLElement>('.qt-toast').hidden = true; }, 5000);
+    notices.message(message);
 }
 import { sizeLabel } from './i18n/format.js';
 const isActive = (item: TransferItem) => !['completed', 'failed', 'cancelled'].includes(item.status);
@@ -191,13 +196,17 @@ function addFiles(files: File[]) {
     renderAttachments();
 }
 function renderTransfers() {
+    feedback.update();
     updateLeaveGuard();
     const list = get<HTMLElement>('[data-transfers]');
+    const restoreLocation = preserveRecordLocation(list);
     const focused = list.contains(activeElement()) ? activeElement() : null;
     const focusAction = focused?.dataset.action;
     const focusId = focused?.dataset.id;
+    const focusPeer = focused?.dataset.peerId;
     list.replaceChildren();
     const activeGroups = new Set(transfers.items.filter((item) => item.groupId && isActive(item)).map((item) => item.groupId));
+    const activeBatches = new Set(transfers.items.filter(item => item.batchId && isActive(item)).map(item => item.batchId));
     const sharing = shareUI?.mode === 'share';
     const shares = shareUI?.entries || [];
     const count = sharing ? shares.length : transfers.items.filter((item) => !item.groupId && !item.shareId).length + transfers.groups.length;
@@ -214,7 +223,7 @@ function renderTransfers() {
     get<HTMLElement>('[data-count]').textContent = count ? String(count) : '';
     const canClear = sharing
         ? shares.some((s) => ['completed', 'cancelled', 'expired', 'unavailable', 'stopped'].includes(s.status))
-        : transfers.items.some((item) => !item.shareId && !isActive(item) && !activeGroups.has(item.groupId));
+        : transfers.items.some((item) => !item.shareId && !isActive(item) && !activeGroups.has(item.groupId) && !activeBatches.has(item.batchId));
     get<HTMLButtonElement>('[data-action="clear"]').hidden = !canClear;
     get<HTMLElement>('.qt-history-footer > span').hidden = sharing;
     get<HTMLElement>('.qt-history-footer').hidden = sharing && get<HTMLButtonElement>('[data-action="clear"]').hidden;
@@ -237,8 +246,9 @@ function renderTransfers() {
         }
     }
     if (focusAction) {
-        [...list.querySelectorAll<HTMLButtonElement>('[data-action]')].find((el) => el.dataset.action === focusAction && el.dataset.id === focusId)?.focus({ preventScroll: true });
+        [...list.querySelectorAll<HTMLButtonElement>('[data-action]')].find((el) => el.dataset.action === focusAction && el.dataset.id === focusId && el.dataset.peerId === focusPeer)?.focus({ preventScroll: true });
     }
+    restoreLocation();
     if (state.modal === 'devices') {
         renderDevices();
     }
@@ -258,9 +268,13 @@ function renderTransfer(item: TransferItem) {
         body.append(element('pre', 'qt-text-content', item.text ?? sourceText));
     }
     else {
-        body.append(element('div', 'qt-transfer-title', item.name));
+        const title = element('div', 'qt-transfer-title', item.name);
+        if (feedback.unread.has(item.localId)) {
+            title.append(element('span', 'qt-new-marker', t('feedback.new')));
+        }
+        body.append(title);
     }
-    const status = { queued: t("app.queued"), waiting: t("app.waiting.to.connect"), transferring: `${Math.min(99, Math.floor(item.bytes / Math.max(item.size, 1) * 100))}%`, completed: item.incoming ? t("app.received") : t("app.delivered"), failed: t("app.failed"), cancelled: t("app.cancelled") }[item.status];
+    const status = { queued: t("app.queued"), waiting: t("app.waiting.to.connect"), transferring: `${Math.min(99, Math.floor(transferredBytes(item) / Math.max(item.size, 1) * 100))}%`, completed: item.incoming ? t("app.received") : t("app.delivered"), failed: t("app.failed"), cancelled: t("app.cancelled") }[item.status];
     body.append(element('div', `qt-transfer-meta${item.status === 'failed' ? ' qt-error-note' : ''}`, `${item.incoming ? t("app.from") : t("app.to")} ${item.peerName} · ${sizeLabel(item.size)} · ${status}`));
     if (item.reason) {
         body.append(element('div', 'qt-transfer-meta qt-error-note', messageText(item.reason, item.reasonKey, item.reasonParams)));
@@ -272,9 +286,12 @@ function renderTransfer(item: TransferItem) {
     if (isActive(item)) {
         const progress = element('progress');
         progress.max = Math.max(item.size, 1);
-        progress.value = item.bytes;
+        progress.value = transferredBytes(item);
         progress.setAttribute('aria-label', t("app.transfer.progress", { p0: item.name }));
         body.append(progress);
+        if (item.kind !== 'text') {
+            body.append(progressMetrics([item]));
+        }
     }
     if (item.url && item.status === 'completed') {
         const trigger = element('button', 'qt-image-trigger');
@@ -316,7 +333,6 @@ function renderGroup(group: TransferGroup) {
     const items = transfers.groupItems(group);
     const completed = items.filter((item) => item.status === 'completed').length;
     const failed = items.filter((item) => item.status === 'failed');
-    const cancelled = items.filter((item) => item.status === 'cancelled').length;
     const active = items.filter(isActive);
     const queued = active.filter((item) => item.status === 'queued').length;
     const delivered = group.peers.filter((peer) => items.filter((item) => item.peerId === peer.id).every((item) => item.status === 'completed')).length;
@@ -329,21 +345,14 @@ function renderGroup(group: TransferGroup) {
     const status = element('div', 'qt-transfer-meta', summary);
     status.dataset.groupStatus = '';
     info.append(status);
-    const counts = [t("app.items.delivered", { p0: completed, p1: items.length })];
-    if (queued) {
-        counts.push(t("app.items.queued", { p0: queued }));
-    }
-    if (failed.length) {
-        counts.push(t("app.items.failed", { p0: failed.length }));
-    }
-    if (cancelled) {
-        counts.push(t("app.items.cancelled", { p0: cancelled }));
-    }
-    info.append(element('div', 'qt-transfer-meta', counts.join(' · ')));
+    const sources = items.filter(item => item.peerId === group.peers[0]?.id);
+    const total = sizeLabel(sources.reduce((sum, item) => sum + item.size, 0));
+    const content = sources.length === 1 && sources[0].kind !== 'text' ? `${sources[0].name} · ${total}` : t('progress.content.summary', { count: sources.length, size: total });
+    info.append(element('div', 'qt-transfer-meta', content));
     const expanded = state.expandedGroups.has(group.id);
     const toggle = button(expanded ? t("app.hide.details") : t("app.show.details"), 'toggle-group', group.id);
     toggle.setAttribute('aria-expanded', String(expanded));
-    toggle.setAttribute('aria-controls', `group-${group.id}`);
+    toggle.setAttribute('aria-controls', group.peers.map(peer => `group-${group.id}-${peer.id}-files`).join(' '));
     top.append(info, toggle);
     row.append(top);
     const actions = element('div', 'qt-group-actions');
@@ -361,15 +370,38 @@ function renderGroup(group: TransferGroup) {
     const details = element('div', 'qt-group-details');
     details.id = `group-${group.id}`;
     details.dataset.groupDetails = '';
-    details.hidden = !expanded;
     for (const peer of group.peers) {
         const peerItems = items.filter((item) => item.peerId === peer.id).sort((a, b) => a.sourceIndex - b.sourceIndex);
         const sent = peerItems.filter((item) => item.status === 'completed').length;
         const section = element('section', 'qt-group-device');
-        section.append(element('h3', '', t("app.items.delivered.alt", { p0: peer.name, p1: sent, p2: peerItems.length })));
-        for (const item of peerItems) {
-            section.append(renderTransfer(item));
+        section.dataset.deviceProgress = peer.id;
+        const heading = element('div', 'qt-device-heading');
+        const total = peerItems.reduce((sum, item) => sum + item.size, 0);
+        const bytes = peerItems.reduce((sum, item) => sum + transferredBytes(item), 0);
+        const active = peerItems.some(isActive);
+        const failed = peerItems.filter(item => item.status === 'failed');
+        const status = sent === peerItems.length ? t('app.delivered') : failed.length ? t('app.failed') : active ? `${Math.min(99, Math.floor(bytes / Math.max(total, 1) * 100))}%` : t('app.cancelled');
+        section.dataset.deviceState = sent === peerItems.length ? 'completed' : failed.length ? 'failed' : active ? 'transferring' : 'cancelled';
+        heading.append(element('h3', '', peer.name), element('span', 'qt-device-progress-state', status));
+        section.append(heading);
+        const meter = element('progress');
+        meter.max = Math.max(total, 1);
+        meter.value = sent === peerItems.length ? Math.max(total, 1) : bytes;
+        meter.setAttribute('aria-label', t('app.transfer.progress', { p0: peer.name }));
+        section.append(meter, progressMetrics(peerItems));
+        if (failed.length) {
+            const retry = button(t('app.retry.failed.items'), 'retry-device', group.id);
+            retry.dataset.peerId = peer.id;
+            retry.disabled = !connection.ready || !state.peers.some(entry => entry.id === peer.id && entry.online);
+            section.append(retry);
         }
+        const files = element('div', 'qt-group-files');
+        files.id = `group-${group.id}-${peer.id}-files`;
+        files.hidden = !expanded;
+        for (const item of peerItems) {
+            files.append(renderTransfer(item));
+        }
+        section.append(files);
         details.append(section);
     }
     row.append(details);
@@ -731,6 +763,13 @@ async function action(name: string, el: {
             }
             transfers.retryGroup(group);
             break;
+        case 'retry-device':
+            if (group) {
+                for (const entry of transfers.groupItems(group).filter(entry => entry.peerId === el.dataset.peerId && entry.status === 'failed')) {
+                    transfers.retry(entry);
+                }
+            }
+            break;
         case 'cancel-group':
             if (!group) {
                 return;
@@ -758,9 +797,12 @@ async function action(name: string, el: {
             tell(t("app.text.copied"));
             break;
         case 'copy-image':
+            feedback.markRead(item);
             await copyImage(item);
             break;
         case 'preview-image':
+            feedback.markRead(item);
+            renderTransfers();
             openImagePreview(item);
             break;
         case 'close-image':
@@ -776,6 +818,7 @@ async function action(name: string, el: {
             link.download = item.name.replace(/[\\/\u0000-\u001f]/g, '_') || t("app.xcopy.file");
             link.click();
             item.downloadStarted = true;
+            feedback.markRead(item);
             renderTransfers();
             tell(t("app.download.started.check.your.browser.s.download.list"));
             setTimeout(() => URL.revokeObjectURL(url), 30000);
@@ -981,6 +1024,19 @@ shareUI = new ShareComposer({
         state.files = state.files.filter((entry) => !submitted.has(entry.id));
         renderAttachments();
     },
+    received: (entry, claim) => notices.push({
+        key: `claim:${claim?.id || entry.id}`, tone: 'success',
+        content: () => ({ title: t('feedback.share.claimed'), description: t('feedback.claim.description', { name: claim?.recipientName || entry.recipientName || '', count: entry.files.length }), actionLabel: t('feedback.view.share') }),
+        valid: () => Boolean(shareUI?.entries.includes(entry)),
+        action: () => {
+            if (!shareUI?.entries.includes(entry)) {
+                return;
+            }
+            shareUI.expandedRecords.add(entry.id);
+            shareUI.setMode('share');
+            locateRecord(root.querySelector<HTMLElement>(`[data-share-record="${CSS.escape(entry.id)}"]`));
+        }
+    }),
     changed: () => { updateSend(); renderTransfers(); }
 });
 renderTarget();
@@ -995,7 +1051,7 @@ onLocaleChange(() => { renderTarget(); renderAttachments(); renderTransfers(); r
     get<HTMLElement>('[data-dialog-title]').textContent = type === 'devices' ? t("app.my.devices") : type === 'approval' ? t("app.confirm.new.device") : type === 'name' ? t("app.name.this.device") : t("app.connect.device"); });
 
 function refreshMessages() {
-  for (const element of document.querySelectorAll<HTMLElement>('.qt-toast, .qt-input-error, .share-feedback')) {
+  for (const element of document.querySelectorAll<HTMLElement>('.qt-input-error, .share-feedback')) {
     if (element.textContent) {
       element.textContent = messageText(element.textContent);
     }

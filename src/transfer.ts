@@ -7,6 +7,7 @@ import type { Claim, ShareSnapshot } from './types/share.js';
 import type { TransferItem, TransferGroup, TransferOffer, Source, Signal, TransferStatus, TerminalStatus, Metadata } from './types/transfer.js';
 import { errorValue } from './dom.js';
 import { sha256 } from './vendor/noble-hashes/sha2.js';
+import { SpeedSampler } from './transfer-progress.js';
 const ended = { has: (status: TransferStatus): status is TerminalStatus => ['completed', 'failed', 'cancelled'].includes(status) };
 const chunkSize = 16384;
 const blockSize = 1024 * 1024;
@@ -29,6 +30,7 @@ export class Transfers extends EventTarget {
     changeTimer: ReturnType<typeof setTimeout> | null = null;
     pumpScheduled = false;
     lastQueuePeer = '';
+    private speedSampler = new SpeedSampler();
     constructor(connection: Connection) {
         super();
         this.connection = connection;
@@ -88,7 +90,20 @@ export class Transfers extends EventTarget {
             this.schedulePump();
         });
         connection.addEventListener('peers', (e) => this.updatePeers(e.detail.peers));
+        let lastMaintenance = Date.now();
         this.maintenance = setInterval(() => {
+            let active = false;
+            for (const item of this.items) {
+                this.speedSampler.sample(item);
+                active ||= !ended.has(item.status) && item.kind !== 'text';
+            }
+            if (active) {
+                this.changed();
+            }
+            if (Date.now() - lastMaintenance < 5000) {
+                return;
+            }
+            lastMaintenance = Date.now();
             for (const item of this.items) {
                 if (!ended.has(item.status) && item.status !== 'queued') {
                     if (Date.now() - item.activity > 45000) {
@@ -101,7 +116,7 @@ export class Transfers extends EventTarget {
                     }
                 }
             }
-        }, 5000);
+        }, 1000);
     }
     changed(force = false) {
         this.schedulePump();
@@ -134,7 +149,8 @@ export class Transfers extends EventTarget {
             return [];
         }
         const batch = group ? { id: crypto.randomUUID(), peers: recipients, sourceCount: sources.length } : null;
-        const items = sources.flatMap((source, sourceIndex) => recipients.map((peer) => this.queuedItem(peer, source, { groupId: batch?.id, sourceIndex })));
+        const batchId = crypto.randomUUID();
+        const items = sources.flatMap((source, sourceIndex) => recipients.map((peer) => this.queuedItem(peer, source, { groupId: batch?.id, batchId, sourceIndex })));
         if (batch) {
             this.groups.unshift(batch);
         }
@@ -241,7 +257,7 @@ export class Transfers extends EventTarget {
         if (!peer || index < 0) {
             return;
         }
-        const replacement = this.queuedItem(peer, item.source, { localId: item.localId, groupId: item.groupId, sourceIndex: item.sourceIndex, shareId: item.shareId, claimId: item.claimId, shareIndex: item.shareIndex, shareOpen: item.shareOpen });
+        const replacement = this.queuedItem(peer, item.source, { localId: item.localId, groupId: item.groupId, batchId: item.batchId, sourceIndex: item.sourceIndex, shareId: item.shareId, claimId: item.claimId, shareIndex: item.shareIndex, shareOpen: item.shareOpen });
         this.byId.delete(item.id || '');
         this.items[index] = replacement;
         this.queue.push(replacement);
@@ -418,6 +434,7 @@ export class Transfers extends EventTarget {
             throw this.relayError(item);
         }
         item.status = 'transferring';
+        this.speedSampler.sample(item);
         this.changed(true);
     }
     async sendBytes(item: TransferItem) {
@@ -581,8 +598,9 @@ export class Transfers extends EventTarget {
     }
     clear(matches: (item: TransferItem) => boolean = () => true) {
         const activeGroups = new Set(this.items.filter((item) => item.groupId && !ended.has(item.status)).map((item) => item.groupId));
+        const activeBatches = new Set(this.items.filter(item => item.batchId && !ended.has(item.status)).map(item => item.batchId));
         this.items = this.items.filter((item) => {
-            if (!matches(item) || item.shareOpen || !ended.has(item.status) || activeGroups.has(item.groupId)) {
+            if (activeBatches.has(item.batchId) || !matches(item) || item.shareOpen || !ended.has(item.status) || activeGroups.has(item.groupId)) {
                 return true;
             }
             if (item.url) {

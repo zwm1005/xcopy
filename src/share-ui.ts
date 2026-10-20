@@ -1,3 +1,5 @@
+import { progressMetrics, transferredBytes } from './transfer-progress.js';
+import { preserveRecordLocation } from './notices.js';
 import type { ClientLimits } from './types/device.js';
 import { messageText } from './i18n/errors.js';
 import { t } from './i18n/index.js';
@@ -101,13 +103,14 @@ export function statusLabel(s: ShareSnapshot) {
     return { draining: t("share-ui.new.claims.stopped"), ready: t("share-ui.waiting.for.a.recipient"), claimed: t("share-ui.being.claimed"), completed: t("share-ui.all.claimed"), cancelled: t("app.cancelled"), expired: t("share-ui.expired"), unavailable: t("share-ui.share.unavailable"), stopped: t("share-ui.share.ended") }[s.status] || t("share-ui.connecting");
 }
 export function progressNode(items: TransferItem[], totalBytes: number, completed: number, count: number) {
-    const bytes = items.reduce((sum, item) => sum + item.bytes, 0);
+    const bytes = items.reduce((sum, item) => sum + transferredBytes(item), 0);
     const box = el('div', 'share-progress');
     const meter = el('progress');
     meter.max = Math.max(totalBytes, 1);
     meter.value = totalBytes ? Math.min(bytes, totalBytes) : completed === count ? 1 : 0;
     meter.setAttribute('aria-label', t("share-ui.overall.file.reception.progress"));
     box.append(meter, el('p', 'share-muted share-small', t("share-ui.verified.files", { p0: completed, p1: count, p2: sizeLabel(Math.min(bytes, totalBytes)), p3: sizeLabel(totalBytes) })));
+    box.append(progressMetrics(items, totalBytes, bytes));
     return box;
 }
 export function saveBlob(blob: Blob, name: string) {
@@ -128,6 +131,7 @@ export class ShareComposer {
     consumeFiles: ShareComposerOptions['consumeFiles'];
     tell: ShareComposerOptions['tell'];
     changed: ShareComposerOptions['changed'];
+    received: ShareComposerOptions['received'];
     entries: ShareEntry[] = [];
     expandedRecords = new Set<string>();
     selected: string | null = null;
@@ -145,7 +149,7 @@ export class ShareComposer {
         sources: File[];
         fileIds: string[];
     } | null = null;
-    constructor({ root, connection, transfers, files, pick, remove, consumeFiles, addFiles, tell, changed }: ShareComposerOptions) {
+    constructor({ root, connection, transfers, files, pick, remove, consumeFiles, addFiles, tell, changed, received }: ShareComposerOptions) {
         this.root = root;
         this.connection = connection;
         this.transfers = transfers;
@@ -155,6 +159,7 @@ export class ShareComposer {
         this.consumeFiles = consumeFiles;
         this.tell = tell;
         this.changed = changed;
+        this.received = received;
         this.entries = [];
         this.expandedRecords = new Set();
         this.selected = null;
@@ -244,7 +249,19 @@ export class ShareComposer {
             this.consumeFiles(fileIds);
         }
         if (entry) {
+            const completedClaims = new Set((entry.claims || []).filter(claim => claim.state === 'completed').map(claim => claim.id));
+            const completed = entry.status === 'completed';
             Object.assign(entry, value);
+            if (entry.mode === 'multiple') {
+                for (const claim of entry.claims || []) {
+                    if (claim.state === 'completed' && !completedClaims.has(claim.id)) {
+                        this.received?.(entry, claim);
+                    }
+                }
+            }
+            else if (entry.status === 'completed' && !completed) {
+                this.received?.(entry);
+            }
             for (const claim of entry.claims || []) {
                 if (terminal.has(claim.state)) {
                     this.releaseClaim(entry.id, claim);
@@ -325,11 +342,25 @@ export class ShareComposer {
             const row = el('li', 'share-claim');
             row.dataset.claimRecord = claim.id;
             row.dataset.claimState = claim.state;
-            const state = { queued: t("share-ui.waiting.for.a.recipient"), transferring: t("share-ui.being.claimed"), retryable: t("share-ui.awaiting.retry.alt"), completed: t("share-ui.claim.received"), cancelled: t("app.cancelled"), expired: t("share-ui.timed.out"), unavailable: t("share-ui.offline") }[claim.state];
+            let state = { queued: t("share-ui.waiting.for.a.recipient"), transferring: t("share-ui.being.claimed"), retryable: t("share-ui.awaiting.retry.alt"), completed: t("share-ui.claim.received"), cancelled: t("app.cancelled"), expired: t("share-ui.timed.out"), unavailable: t("share-ui.offline") }[claim.state];
             const info = el('div', 'share-claim-info');
             info.append(el('p', 'share-claim-name', claim.recipientName));
             if (claim.reason) {
                 info.append(el('p', 'share-muted share-small share-claim-reason', messageText(claim.reason, claim.reasonKey, claim.reasonParams)));
+            }
+            if (claim.state === 'transferring' || claim.state === 'retryable' || claim.state === 'completed') {
+                const items = this.transfers.items.filter(item => item.shareId === s.id && item.claimId === claim.id);
+                const done = new Set(claim.files.filter(file => file.completed).map(file => file.index));
+                const bytes = claim.state === 'completed' ? s.totalBytes : s.files.filter(file => done.has(file.index)).reduce((sum, file) => sum + file.size, 0)
+                    + items.filter(item => !done.has(item.shareIndex)).reduce((sum, item) => sum + transferredBytes(item), 0);
+                const meter = el('progress');
+                meter.max = Math.max(s.totalBytes, 1);
+                meter.value = claim.state === 'completed' ? meter.max : Math.min(s.totalBytes, bytes);
+                meter.setAttribute('aria-label', t('app.transfer.progress', { p0: claim.recipientName }));
+                if (claim.state === 'transferring') {
+                    state = `${Math.min(99, Math.floor(bytes / Math.max(s.totalBytes, 1) * 100))}%`;
+                }
+                info.append(meter, progressMetrics(items, s.totalBytes, bytes));
             }
             row.append(detailIcon('device'), info, el('span', 'share-claim-status', state));
             list.append(row);
@@ -599,6 +630,7 @@ export class ShareComposer {
             footer.append(cancel);
             this.panel.append(footer);
         }
+        const restoreLocation = preserveRecordLocation(this.records);
         this.records.replaceChildren();
         for (const s of this.entries) {
             const row = el('article', 'qt-transfer-card share-record');
@@ -671,6 +703,7 @@ export class ShareComposer {
             }
             this.records.append(row);
         }
+        restoreLocation();
         if (focusKey) {
             [...this.root.querySelectorAll<HTMLElement>('[data-share-control]')].find((n) => n.dataset.shareControl === focusKey)?.focus({ preventScroll: true });
         }
