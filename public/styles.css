@@ -70,10 +70,10 @@ html,body { margin:0; min-height:100%; }
   #suichuan:lang(en) .qt-compose-footer .qt-send { min-width: calc(6em + 28px); }
   #suichuan .qt-compose-tools { display: flex; align-items: center; gap: 4px; min-width: 0; }
   #suichuan .qt-send-note { color: var(--qt-muted); font-size: 12px; margin: 12px 0 0; text-align: center; }
-  #suichuan .qt-transfers { margin: 32px 8px 0; }
+  #suichuan .qt-transfers { margin: 32px 0 0; }
   #suichuan .qt-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
   #suichuan .qt-section-heading h2 { font-size: 12px; font-weight: 400; color: var(--qt-muted); }
-  #suichuan .qt-section-heading h2 span { font-size: 12px; color: var(--qt-muted); font-weight: 400; margin-left: 5px; }
+  #suichuan .qt-section-heading h2 [data-count] { margin-left: 5px; }
   #suichuan .qt-section-heading > span { font-size: 12px; color: var(--qt-muted); }
   #suichuan [data-transfers] { display: grid; gap: 12px; }
   #suichuan .qt-transfer-row { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
@@ -169,7 +169,6 @@ html,body { margin:0; min-height:100%; }
     #suichuan .qt-code-input { font-size: 26px; }
   }
   @media (max-width: 480px) {
-    #suichuan .qt-transfers { margin-inline: 0; }
     #suichuan .qt-transfer-row, #suichuan .qt-group-top { flex-direction: column; align-items: stretch; gap: 8px; }
     #suichuan .qt-transfer-actions, #suichuan .qt-group-actions { justify-content: flex-end; }
     #suichuan .qt-group-top > button { align-self: flex-end; }

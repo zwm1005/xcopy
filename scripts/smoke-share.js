@@ -52,7 +52,7 @@ try {
   await sender.goto(`${origin}/transfer`);
   await expect(sender.locator('[data-connection]')).toHaveAttribute('data-connection', 'ready');
   await sender.getByRole('tab', { name: '链接分享', exact: true }).click();
-  const files = Array.from({ length: 8 }, (_, i) => ({ name: i === 0 ? '分享验收 中文.txt' : `share-${i}.bin`, mimeType: 'application/octet-stream', buffer: i === 7 ? Buffer.alloc(0) : Buffer.alloc(i === 6 ? (large ? 51 : 2) * 1048576 : 2048, i + 25) }));
+  const files = Array.from({ length: 10 }, (_, i) => ({ name: i === 0 ? '分享验收 中文.txt' : `share-${i}.bin`, mimeType: 'application/octet-stream', buffer: i === 9 ? Buffer.alloc(0) : Buffer.alloc(i === 8 ? (large ? 51 : 2) * 1048576 : 2048, i + 25) }));
   let inputFiles = files;
   if (large) {
     await mkdir(`${output}/fixtures`, { recursive: true });
@@ -73,7 +73,7 @@ try {
   const url = await sender.locator('[data-share-url]').inputValue();
   const image = PNG.sync.read(await sender.locator('.share-qr').screenshot());
   expect(jsQR(new Uint8ClampedArray(image.data), image.width, image.height)?.data).toBe(url);
-  checks.push('8 个文件、二维码解码与分享链接完全一致');
+  checks.push('10 个文件、二维码解码与分享链接完全一致');
   await sender.screenshot({ path: `${output}/sender.png`, fullPage: true });
   const recipient = await page();
   const other = await page();
@@ -100,13 +100,13 @@ try {
   const verified = [];
   for (let i = 0; i < files.length; i += 1) {
     const event = recipient.waitForEvent('download');
-    await recipient.locator(`[data-save-index="${i}"]`).click();
+    await recipient.locator(`[data-save-index="${i}"]`).click({ delay: 150 });
     const download = await event;
     const bytes = await readFile(await download.path());
     expect(bytes).toEqual(files[i].buffer);
     verified.push({ name: files[i].name, bytes: bytes.length, sha256: hash(bytes) });
   }
-  checks.push(`8 个文件下载字节一致，包含空文件、中文文件名和 ${large ? 51 : 2} MiB 二进制`);
+  checks.push(`10 个文件下载字节一致，包含空文件、中文文件名和 ${large ? 51 : 2} MiB 二进制`);
   const zipEvent = recipient.waitForEvent('download');
   await recipient.locator('[data-save-all]').click();
   const zip = await zipEvent;
@@ -116,7 +116,7 @@ try {
   expect(await recipient.evaluate(async () => (await indexedDB.databases()).length)).toBe(0);
   checks.push('领取后重开链接失效，访客未创建永久设备身份');
   const routes = [...await sender.evaluate(() => window.shareRoutes), ...await recipient.evaluate(() => window.shareRoutes)];
-  expect(routes.length).toBeGreaterThanOrEqual(8);
+  expect(routes.length).toBeGreaterThanOrEqual(files.length);
   if (relay) {
     expect(routes.every((route) => route === 'relay')).toBe(true);
   }

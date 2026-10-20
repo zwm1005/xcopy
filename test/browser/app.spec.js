@@ -90,6 +90,19 @@ test('three-device pairing, real text/files/screenshots, refresh identity, revoc
     await expect(a.page.locator('.qt-composer .qt-attachment-preview')).toHaveCount(1);
     await a.page.locator('[data-action="send"]').click();
     await expect(received).toHaveCount(3);
+    for (const width of [1280, 768, 375, 320]) {
+      await a.page.setViewportSize({ width, height: 900 });
+      const composer = await a.page.locator('.qt-composer').boundingBox();
+      const record = await a.page.locator('[data-transfer].qt-transfer-card').first().boundingBox();
+      const heading = await a.page.locator('.qt-section-heading').boundingBox();
+      const title = await a.page.locator('.qt-section-heading h2 > span').first().boundingBox();
+      expect(record.x).toBeCloseTo(composer.x, 1);
+      expect(record.width).toBeCloseTo(composer.width, 1);
+      expect(heading.x).toBeCloseTo(composer.x, 1);
+      expect(title.x).toBeCloseTo(composer.x, 1);
+      expect(await a.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    }
+    await a.page.setViewportSize({ width: 1280, height: 900 });
     const fileRow = b.page.locator('[data-transfer]').filter({ hasText: '测试文件.bin' });
     const downloadPromise = b.page.waitForEvent('download');
     await fileRow.locator('[data-action="save-file"]').click();

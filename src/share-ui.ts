@@ -7,8 +7,28 @@ import { query, activeElement } from './dom.js';
 import { errorValue } from './dom.js';
 const terminal = new Set(['completed', 'cancelled', 'expired', 'unavailable', 'stopped']);
 import { sizeLabel } from './i18n/format.js';
+import { MAX_FILES_PER_SEND } from './shared/transfer-limits.js';
 export { sizeLabel };
-export const fileLimitLabel = (config?: ClientLimits | null) => t("share-ui.up.to.8.files.no.p2p.size.limit", { p0: sizeLabel(config?.maxRelayFileBytes || config?.maxFileBytes || 50 * 1048576) });
+export const fileLimitLabel = (config?: ClientLimits | null) => t("share-ui.file.limits", { count: MAX_FILES_PER_SEND, relayLimit: sizeLabel(config?.maxRelayFileBytes || config?.maxFileBytes || 50 * 1048576) });
+export function renderFileLimitNotice(node: HTMLElement, config?: ClientLimits | null) {
+    node.classList.add('share-file-limit');
+    const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    icon.classList.add('share-notice-icon');
+    icon.setAttribute('viewBox', '0 0 20 20');
+    icon.setAttribute('fill', 'none');
+    icon.setAttribute('stroke', 'currentColor');
+    icon.setAttribute('stroke-width', '1.4');
+    icon.setAttribute('stroke-linecap', 'round');
+    icon.setAttribute('aria-hidden', 'true');
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', '10');
+    circle.setAttribute('cy', '10');
+    circle.setAttribute('r', '7.5');
+    const mark = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    mark.setAttribute('d', 'M10 6v4.5M10 14h.01');
+    icon.append(circle, mark);
+    node.replaceChildren(icon, el('span', '', fileLimitLabel(config)));
+}
 export function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text?: string) {
     const node = document.createElement(tag);
     node.className = className;
@@ -43,9 +63,40 @@ export function fileList<T extends {
     });
     return list;
 }
+function detailIcon(kind: 'file' | 'device') {
+    const symbol = el('span', `share-detail-symbol share-detail-symbol-${kind}`);
+    symbol.setAttribute('aria-hidden', 'true');
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.5');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', kind === 'file'
+        ? 'M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8l-5-5Zm0 0v5h5M8 12h8m-8 4h5'
+        : 'M3 4h18v12H3V4Zm9 12v4m-4 0h8');
+    svg.append(path);
+    symbol.append(svg);
+    return symbol;
+}
+function detailSection(title: string, id: string, summary: string) {
+    const section = el('section', 'share-detail-section');
+    const heading = el('header', 'share-detail-heading');
+    const label = el('h4', '', title);
+    label.id = id;
+    section.setAttribute('aria-labelledby', id);
+    heading.append(label, el('span', 'share-muted share-small', summary));
+    section.append(heading);
+    return section;
+}
 export function statusLabel(s: ShareSnapshot) {
     if (s.mode === 'multiple' && !terminal.has(s.status)) {
         return s.accepting ? t("share-ui.open.for.claims") : t("share-ui.new.claims.stopped");
+    }
+    if (s.mode === 'multiple' && s.status === 'cancelled') {
+        return t("share-ui.share.ended");
     }
     return { draining: t("share-ui.new.claims.stopped"), ready: t("share-ui.waiting.for.a.recipient"), claimed: t("share-ui.being.claimed"), completed: t("share-ui.all.claimed"), cancelled: t("app.cancelled"), expired: t("share-ui.expired"), unavailable: t("share-ui.share.unavailable"), stopped: t("share-ui.share.ended") }[s.status] || t("share-ui.connecting");
 }
@@ -88,6 +139,7 @@ export class ShareComposer {
     panel: HTMLElement;
     records: HTMLElement;
     clock: ReturnType<typeof setInterval>;
+    viewFeedbackTimer: ReturnType<typeof setTimeout> | undefined;
     pendingCreate: {
         id: string;
         sources: File[];
@@ -212,7 +264,7 @@ export class ShareComposer {
                     }
                 }
                 entry.sources = [];
-                if (entry.status === 'cancelled' && this.selected === entry.id) {
+                if (entry.status === 'cancelled' && entry.mode !== 'multiple' && this.selected === entry.id) {
                     this.selected = null;
                     this.shareMode = 'single';
                     this.minutes = 10;
@@ -264,34 +316,34 @@ export class ShareComposer {
         // 等待随后发布的新快照，排队者获得位置后才重建文件任务。
     }
     claimSummary(s: ShareSnapshot) {
-        const n = s.counts || { completed: 0, active: 0, queued: 0, retryable: 0, failed: 0 };
-        return t("share-ui.completed.transferring.queued", { p0: n.completed || 0, p1: n.active || 0, p2: n.queued || 0, p3: n.retryable ? t("share-ui.awaiting.retry", { p0: n.retryable }) : '', p4: n.failed ? t("share-ui.unfinished", { p0: n.failed }) : '' });
+        return t("share-ui.claimed.count", { p0: s.counts?.completed || 0 });
     }
     claimDetails(s: ShareSnapshot) {
-        const list = el('div', 'share-claims');
+        const area = el('div', 'share-claims');
+        const list = el('ul', 'share-claim-list');
         for (const claim of [...(s.claims || [])].reverse()) {
-            const row = el('div', 'share-claim');
+            const row = el('li', 'share-claim');
             row.dataset.claimRecord = claim.id;
             row.dataset.claimState = claim.state;
-            const items = this.transfers.items.filter((item) => item.claimId === claim.id);
-            const count = claim.files.filter((file) => file.completed).length;
-            const state = { queued: t("share-ui.queued.claims.ahead", { p0: Math.max(0, claim.position - 1) }), transferring: t("app.transferring"), retryable: t("share-ui.awaiting.retry.alt"), completed: t("share-ui.completed"), cancelled: t("app.cancelled"), expired: t("share-ui.timed.out"), unavailable: t("share-ui.offline") }[claim.state];
-            const info = el('div');
-            info.append(el('p', 'share-claim-name', claim.recipientName), el('p', 'share-muted share-small', t("share-ui.files.verified", { p0: state, p1: count, p2: claim.files.length })));
+            const state = { queued: t("share-ui.waiting.for.a.recipient"), transferring: t("share-ui.being.claimed"), retryable: t("share-ui.awaiting.retry.alt"), completed: t("share-ui.claim.received"), cancelled: t("app.cancelled"), expired: t("share-ui.timed.out"), unavailable: t("share-ui.offline") }[claim.state];
+            const info = el('div', 'share-claim-info');
+            info.append(el('p', 'share-claim-name', claim.recipientName));
             if (claim.reason) {
-                info.append(el('p', 'share-muted share-small', messageText(claim.reason, claim.reasonKey, claim.reasonParams)));
+                info.append(el('p', 'share-muted share-small share-claim-reason', messageText(claim.reason, claim.reasonKey, claim.reasonParams)));
             }
-            row.append(info);
-            if (claim.state === 'transferring' && items.length) {
-                row.append(progressNode(items, s.totalBytes, count, claim.files.length));
-            }
+            row.append(detailIcon('device'), info, el('span', 'share-claim-status', state));
             list.append(row);
         }
         if (!s.claims?.length) {
-            list.append(el('p', 'share-muted share-small', t("share-ui.no.recipients.yet")));
+            area.append(el('p', 'share-muted share-small share-claims-empty', t("share-ui.no.recipients.yet")));
         }
-        list.append(el('p', 'share-muted share-small', t("share-ui.current.claims.and.the.last.50.finished.records")));
-        return list;
+        else {
+            area.append(list);
+        }
+        if (s.mode === 'multiple') {
+            area.append(el('p', 'share-muted share-small share-claims-note', t("share-ui.current.claims.and.the.last.50.finished.records")));
+        }
+        return area;
     }
     async create() {
         if (this.busy || !this.files().length) {
@@ -328,7 +380,6 @@ export class ShareComposer {
         const focus = activeElement();
         const filesOpen = this.panel.querySelector<HTMLDetailsElement>('.share-file-details')?.open || false;
         const settingsOpen = this.panel.querySelector<HTMLDetailsElement>('[data-share-settings]')?.open || false;
-        const actionsOpen = this.panel.querySelector<HTMLDetailsElement>('.share-more-actions')?.open || false;
         const focusKey = this.panel.contains(focus) || this.records.contains(focus) ? focus?.dataset.shareControl : null;
         this.panel.classList.toggle('share-panel-ended', Boolean(selected && terminal.has(selected.status)));
         this.panel.classList.toggle('share-panel-draft', !selected);
@@ -380,7 +431,9 @@ export class ShareComposer {
             generate.dataset.shareGenerate = '';
             footer.append(tools, generate);
             upload.append(footer);
-            this.panel.append(upload, el('p', 'share-limit', fileLimitLabel(this.connection.config)));
+            const limit = el('p', 'share-limit');
+            renderFileLimitNotice(limit, this.connection.config);
+            this.panel.append(upload, limit);
             const description = el('p', 'share-mode-description', this.shareMode === 'multiple' ? t("share-ui.multiple.recipients.enabled.anyone.with.the.link.can") : t("share-ui.one.recipient.by.default.the.link.expires.after"));
             description.dataset.shareDescription = '';
             this.panel.append(description);
@@ -437,7 +490,7 @@ export class ShareComposer {
             const mark = el('span', 'share-ended-mark', selected.status === 'completed' ? '✓' : '—');
             mark.setAttribute('aria-hidden', 'true');
             const copy = el('div', 'share-ended-copy');
-            const titles: Partial<Record<ShareSnapshot['status'], string>> = { completed: t("share-ui.share.completed"), cancelled: t("share-ui.share.cancelled"), expired: t("share-ui.share.expired"), unavailable: t("share-ui.share.unavailable"), stopped: t("share-ui.share.ended") };
+            const titles: Partial<Record<ShareSnapshot['status'], string>> = { completed: t("share-ui.share.completed"), cancelled: selected.mode === 'multiple' ? t("share-ui.share.ended") : t("share-ui.share.cancelled"), expired: t("share-ui.share.expired"), unavailable: t("share-ui.share.unavailable"), stopped: t("share-ui.share.ended") };
             copy.append(el('h2', '', titles[selected.status]), el('p', 'share-muted', t("share-ui.the.link.and.qr.code.are.no.longer")));
             message.append(mark, copy);
             const next = action(t("share-ui.create.another.share"), () => {
@@ -523,14 +576,14 @@ export class ShareComposer {
                 this.panel.append(el('p', 'share-description', messageText(items.find((i) => i.status === 'failed')?.reason) || (items.some((i) => i.status === 'failed') ? t("share-ui.connection.lost.waiting.for.the.original.recipient.tab") : t("share-ui.the.recipient.is.receiving.keep.this.page.open"))));
             }
             const footer = el('div', 'share-footer');
-            const cancel = action(selected.mode === 'multiple' ? t("share-ui.end.and.interrupt") : t("share-ui.cancel.share"), async () => {
+            const cancel = action(selected.mode === 'multiple' ? t("share-ui.end.share") : t("share-ui.cancel.share"), async () => {
                 if (!window.confirm(selected.mode === 'multiple' ? t("share-ui.the.link.will.expire.and.all.queued.and") : t("share-ui.cancelling.immediately.invalidates.the.share.link.continue"))) {
                     return;
                 }
                 try {
                     this.apply(await this.connection.rpc('share.cancel', { id: selected.id }));
-                    if (this.mode === 'share' && !this.current()) {
-                        this.panel.querySelector<HTMLElement>('[data-share-control="pick-files"]')?.focus();
+                    if (this.mode === 'share') {
+                        this.panel.querySelector<HTMLElement>('[data-share-control="new-share"], [data-share-control="pick-files"]')?.focus();
                     }
                 }
                 catch (caught) {
@@ -540,38 +593,10 @@ export class ShareComposer {
             });
             cancel.dataset.shareControl = 'cancel';
             cancel.disabled = !this.connection.ready;
-            if (selected.mode === 'multiple' && selected.accepting) {
-                const stop = action(t("share-ui.stop.new.claims"), async () => {
-                    const count = (selected.claims || []).filter((c) => !terminal.has(c.state)).length;
-                    if (!window.confirm(t("share-ui.stop.accepting.new.claims.the.accepted.claims.will", { p0: count }))) {
-                        return;
-                    }
-                    try {
-                        this.apply(await this.connection.rpc('share.stop', { id: selected.id }));
-                    }
-                    catch (caught) {
-                        const error = errorValue(caught);
-                        this.tell(error.message);
-                    }
-                });
-                stop.dataset.shareControl = 'stop';
-                stop.disabled = !this.connection.ready;
-                footer.append(stop);
-            }
-            else {
+            if (selected.mode !== 'multiple') {
                 footer.append(el('span', 'share-muted share-small', t("share-ui.files.stay.on.your.device")));
             }
-            if (selected.mode === 'multiple') {
-                const more = el('details', 'share-more-actions');
-                more.open = actionsOpen;
-                const summary = el('summary', '', t("share-ui.more.actions"));
-                summary.dataset.shareControl = 'more-actions';
-                more.append(summary, cancel);
-                footer.append(more);
-            }
-            else {
-                footer.append(cancel);
-            }
+            footer.append(cancel);
             this.panel.append(footer);
         }
         this.records.replaceChildren();
@@ -580,7 +605,8 @@ export class ShareComposer {
             row.dataset.shareRecord = s.id;
             row.dataset.status = s.status;
             const main = el('div', 'share-record-main');
-            const info = el('div');
+            const info = el('div', 'share-record-info');
+            const controls = el('div', 'share-record-actions');
             info.append(el('h3', '', t("share-ui.files.alt", { p0: s.mode === 'multiple' ? t("share-ui.multiple.recipients.alt") : t("share-ui.one.recipient"), p1: s.files.length })));
             if (s.recipientName) {
                 const recipient = el('p', 'share-recipient', t("share-ui.receiving.device", { p0: s.recipientName }));
@@ -591,17 +617,24 @@ export class ShareComposer {
             if (s.mode === 'multiple') {
                 info.append(el('p', 'share-muted share-small share-counts', this.claimSummary(s)));
             }
-            main.append(info);
+            main.append(info, controls);
             row.append(main);
             if (terminal.has(s.status) || s.mode === 'multiple') {
                 const expanded = this.expandedRecords.has(s.id);
                 const details = el('div', 'share-record-details');
                 details.id = `share-result-${s.id}`;
                 details.hidden = !expanded;
-                details.append(fileList(s.files, s.mode === 'multiple' ? null : (file) => el('span', 'share-small share-muted', file.completed ? t("share-ui.verified") : t("share-ui.unfinished.alt"))));
-                if (s.mode === 'multiple') {
-                    details.append(this.claimDetails(s));
+                const sharedFiles = detailSection(t("share-ui.shared.files"), `share-files-${s.id}`, t("share-ui.files", { p0: s.files.length, p1: sizeLabel(s.totalBytes) }));
+                sharedFiles.classList.add('share-detail-files');
+                const files = fileList(s.files, s.mode === 'multiple' ? null : (file) => el('span', 'share-small share-muted', file.completed ? t("share-ui.verified") : t("share-ui.unfinished.alt")));
+                for (const file of files.children) {
+                    file.prepend(detailIcon('file'));
                 }
+                sharedFiles.append(files);
+                const recipients = detailSection(t("share-ui.receiving.devices"), `share-devices-${s.id}`, this.claimSummary(s));
+                recipients.classList.add('share-detail-devices');
+                recipients.append(this.claimDetails(s));
+                details.append(sharedFiles, recipients);
                 if (s.mode !== 'multiple') {
                     details.append(el('p', 'share-muted share-small', s.status === 'completed' ? t("share-ui.all.files.received.and.verified.the.recipient.can") : t("share-ui.this.share.has.ended.sharing.again.will.create")));
                 }
@@ -617,7 +650,7 @@ export class ShareComposer {
                 toggle.dataset.shareControl = `record-details-${s.id}`;
                 toggle.setAttribute('aria-expanded', String(expanded));
                 toggle.setAttribute('aria-controls', details.id);
-                main.append(toggle);
+                controls.append(toggle);
                 row.append(details);
             }
             if (!terminal.has(s.status)) {
@@ -626,9 +659,15 @@ export class ShareComposer {
                     this.setMode('share');
                     this.panel.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
                     this.panel.querySelector<HTMLElement>('[data-share-control]')?.focus({ preventScroll: true });
+                    // 当前分享可能已完整显示，滚动和鼠标焦点都不足以反馈这次点击。
+                    clearTimeout(this.viewFeedbackTimer);
+                    this.panel.classList.add('share-panel-highlighted');
+                    this.viewFeedbackTimer = setTimeout(() => this.panel.classList.remove('share-panel-highlighted'), 2000);
+                    this.tell(t("share-ui.share.shown.above"));
                 });
                 view.dataset.shareControl = `record-view-${s.id}`;
-                main.append(view);
+                view.setAttribute('aria-controls', this.panel.id);
+                controls.append(view);
             }
             this.records.append(row);
         }
