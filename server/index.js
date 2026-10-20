@@ -273,7 +273,6 @@ export function createApp(overrides = {}) {
         }
         store.pair(r.owner, r.from, now());
         endRequest(data.id, 'paired');
-        invalidateCode(r.code);
         publish();
         return {};
       }

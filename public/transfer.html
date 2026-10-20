@@ -107,7 +107,7 @@ SOFTWARE.
             <button type="button" role="tab" aria-selected="false" class="cursor-interaction" data-pair-tab="enter" id="qt-enter-tab" aria-controls="qt-enter-panel"><span data-i18n="page.enter.pairing.code">Enter pairing code</span></button>
           </div>
           <div id="qt-code-panel" role="tabpanel" aria-labelledby="qt-show-tab">
-            <p class="qt-dialog-description"><span data-i18n="page.on.the.other.device.open.the.same.url">On the other device, open the same URL, choose Connect device → Enter pairing code and enter these digits. Return here to confirm.</span></p>
+            <p class="qt-dialog-description"><span data-i18n="page.on.the.other.device.open.the.same.url">Other devices can open the same URL, choose Connect device → Enter pairing code and enter these digits. This code can be reused until it expires. Approve each device individually here.</span></p>
             <div class="qt-code" data-code></div>
             <div class="qt-code-meta"><span data-code-expiry><span data-i18n="page.expires.in.10.minutes">Expires in 10 minutes</span></span><button type="button" class="qt-text-button cursor-interaction" data-action="refresh-code"><span data-i18n="page.new.code">New code</span></button></div>
             <button type="button" class="qt-button qt-primary qt-full cursor-interaction" data-action="copy-code"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V3H3v13h5"/></svg><span data-i18n="app.copy">Copy</span></button>
@@ -122,6 +122,7 @@ SOFTWARE.
         <div data-approval-panel hidden>
           <div class="qt-request-device"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="13" rx="2"/><path d="M12 16v5m-5 0h10"/></svg><strong data-request-name><span data-i18n="page.new.device">New device</span></strong><span data-request-id><span data-i18n="page.requesting.connection">Requesting connection</span></span></div>
           <p class="qt-dialog-description qt-center"><span data-i18n="page.allow.this.device.to.connect">Allow this device to connect?</span></p>
+          <p class="qt-dialog-description qt-center" data-request-count role="status" hidden></p>
           <div class="qt-request-actions"><button type="button" class="qt-button qt-outline cursor-interaction" data-action="deny"><span data-i18n="page.decline">Decline</span></button><button type="button" class="qt-button qt-primary cursor-interaction" data-action="allow"><span data-i18n="page.allow.and.remember">Allow and remember</span></button></div>
         </div>
         <div data-devices-panel hidden>

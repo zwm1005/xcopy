@@ -392,16 +392,61 @@ test('reception status identifies the actual receiving tab and follows its disco
   await sender.rpc('transfer.end', { id: next.id, status: 'cancelled' });
 });
 
-test('A–B and A–C never authorize B–C; approval binds the specific requester and consumes code', async (t) => {
+test('a reusable code still requires requester-specific approval and never authorizes B–C', async (t) => {
   const { connect } = await setup(t);
   const [a, b, c] = await Promise.all([connect('A'), connect('B'), connect('C')]);
   const code = await pair(a, b);
-  await rejected(c.rpc('pair.join', { code }), 'INVALID_CODE');
-  await pair(a, c);
+  const { id } = await c.rpc('pair.join', { code });
+  assert.deepEqual((await c.rpc('peers.list')).peers, []);
+  assert.deepEqual((await a.rpc('peers.list')).peers.map((p) => p.id), [b.id]);
+  await rejected(b.rpc('pair.respond', { id, allow: true }), 'NOT_FOUND');
+  await a.rpc('pair.respond', { id, allow: true });
   assert.deepEqual(new Set((await a.rpc('peers.list')).peers.map((p) => p.id)), new Set([b.id, c.id]));
   assert.deepEqual((await b.rpc('peers.list')).peers.map((p) => p.id), [a.id]);
   await rejected(b.rpc('transfer.start', { peerId: c.id, metadata }), 'NOT_PAIRED');
   await rejected(b.rpc('pair.forget', { peerId: c.id }), 'NOT_FOUND');
+});
+
+test('five devices share one code while approval, rejection and cancellation affect only their own request', async (t) => {
+  let time = Date.now();
+  const { connect } = await setup(t, { now: () => time });
+  const owner = await connect('主设备');
+  const devices = await Promise.all(Array.from({ length: 5 }, (_, index) => connect(`设备 ${index + 1}`)));
+  const { code, expires } = await owner.rpc('pair.code');
+  const requests = await Promise.all(devices.map((device) => device.rpc('pair.join', { code })));
+  for (let index = 0; index < devices.length; index += 1) {
+    const request = await owner.event('pair.request', (request) => request.id === requests[index].id);
+    assert.equal(request.fingerprint, devices[index].id);
+    assert.equal(request.expires, expires);
+    assert.deepEqual((await devices[index].rpc('peers.list')).peers, []);
+  }
+  await owner.rpc('pair.respond', { id: requests[0].id, allow: true });
+  assert.equal((await devices[0].event('pair.result')).status, 'paired');
+  for (const device of devices.slice(1)) {
+    assert.deepEqual((await device.rpc('peers.list')).peers, []);
+    assert.equal(device.events.some((event) => event.type === 'pair.result'), false);
+  }
+  await owner.rpc('pair.respond', { id: requests[1].id, allow: false });
+  assert.equal((await devices[1].event('pair.result')).status, 'denied');
+  await devices[2].rpc('pair.cancel', { id: requests[2].id });
+  assert.equal((await devices[2].event('pair.result')).status, 'cancelled');
+  // Keep the existing per-source attempt limit while exercising later retries.
+  time += 60001;
+  for (const index of [1, 2]) {
+    requests[index] = await devices[index].rpc('pair.join', { code });
+    assert.equal(requests[index].expires, expires, 'reuse does not extend the code lifetime');
+  }
+  for (const index of [3, 4, 1, 2]) {
+    await owner.rpc('pair.respond', { id: requests[index].id, allow: true });
+    assert.equal((await devices[index].event('pair.result')).status, 'paired');
+  }
+  assert.deepEqual(new Set((await owner.rpc('peers.list')).peers.map((peer) => peer.id)), new Set(devices.map((device) => device.id)));
+  for (const device of devices) {
+    assert.deepEqual((await device.rpc('peers.list')).peers.map((peer) => peer.id), [owner.id]);
+  }
+  await rejected(owner.rpc('pair.respond', { id: requests[0].id, allow: true }), 'NOT_FOUND');
+  await rejected(devices[0].rpc('pair.join', { code }), 'ALREADY_PAIRED');
+  assert.equal(owner.events.some((event) => event.type === 'pair.codeExpired'), false);
 });
 
 test('wrong and expired codes give the same response; changing a code cancels pending approvals', async (t) => {
@@ -409,15 +454,30 @@ test('wrong and expired codes give the same response; changing a code cancels pe
   const { app, connect } = await setup(t, { now: () => time, codeTtl: 1000 });
   const a = await connect('A');
   const b = await connect('B');
+  const c = await connect('C');
+  const d = await connect('D');
   const { code } = await a.rpc('pair.code');
   const { id } = await b.rpc('pair.join', { code });
+  await a.rpc('pair.respond', { id, allow: true });
+  const waiting = await Promise.all([c, d].map((device) => device.rpc('pair.join', { code })));
   await a.rpc('pair.code');
-  await rejected(a.rpc('pair.respond', { id, allow: true }), 'NOT_FOUND');
+  for (const [index, device] of [c, d].entries()) {
+    assert.equal((await device.event('pair.result')).status, 'expired');
+    await rejected(a.rpc('pair.respond', { id: waiting[index].id, allow: true }), 'NOT_FOUND');
+  }
   const fresh = await a.rpc('pair.code');
+  const expiring = await Promise.all([c, d].map((device) => device.rpc('pair.join', { code: fresh.code })));
   time += 2000;
   app.sweep();
-  await rejected(b.rpc('pair.join', { code: fresh.code }), 'INVALID_CODE');
-  await rejected(b.rpc('pair.join', { code: 'wrong' }), 'INVALID_CODE');
+  for (const [index, device] of [c, d].entries()) {
+    assert.equal((await device.event('pair.result')).status, 'expired');
+    await rejected(a.rpc('pair.respond', { id: expiring[index].id, allow: true }), 'NOT_FOUND');
+  }
+  time += 60001;
+  await rejected(c.rpc('pair.join', { code: fresh.code }), 'INVALID_CODE');
+  await rejected(c.rpc('pair.join', { code: 'wrong' }), 'INVALID_CODE');
+  assert.deepEqual((await a.rpc('peers.list')).peers.map((peer) => peer.id), [b.id]);
+  assert.deepEqual((await b.rpc('peers.list')).peers.map((peer) => peer.id), [a.id]);
 });
 
 test('pair guessing is rate-limited by source and globally', async (t) => {
