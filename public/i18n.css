@@ -1,6 +1,30 @@
-.locale-picker { display: inline-flex; align-items: center; gap: .4rem; font-size: .75rem; flex-shrink: 0; margin-inline-start: .6rem; }
+.locale-picker { display: inline-flex; align-items: center; gap: .4rem; font-size: 13px; flex-shrink: 0; margin-inline-start: .6rem; }
 .locale-picker > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .locale-picker select { color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 6px; padding: .35rem; max-width: 100px; font: inherit; }
+.sc-select-native { position: absolute !important; width: 1px !important; height: 1px !important; max-width: 1px !important; padding: 0 !important; border: 0 !important; opacity: 0; clip-path: inset(50%); pointer-events: none; }
+.sc-select-trigger, #suichuan .sc-select-trigger { display: inline-flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 36px; min-width: 0; padding: 7px 11px; border: 1px solid light-dark(#deded9, #44443f); border-radius: 8px; background: light-dark(#fff, #222); color: light-dark(#333, #eeeee9); font: 400 13px/20px -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; text-align: left; cursor: pointer; }
+.sc-select-trigger:hover:not(:disabled), .sc-select-trigger[aria-expanded="true"], #suichuan .sc-select-trigger:hover:not(:disabled), #suichuan .sc-select-trigger[aria-expanded="true"] { background: light-dark(#f5f5f3, #2c2c2a); border-color: light-dark(#aaa9a3, #6a6963); }
+.sc-select-trigger:focus-visible, #suichuan .sc-select-trigger:focus-visible { outline: 2px solid light-dark(#55554f, #bdbdb4); outline-offset: 3px; }
+.sc-select-trigger:disabled, #suichuan .sc-select-trigger:disabled { color: light-dark(#777770, #aaa99f); cursor: default; opacity: 1; }
+.sc-select-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-select-arrow { width: 6px; height: 6px; flex-shrink: 0; margin: -3px 2px 0; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); opacity: .6; }
+.sc-select-trigger[aria-expanded="true"] .sc-select-arrow { transform: translateY(3px) rotate(225deg); }
+.locale-picker .sc-select-trigger { min-width: 104px; }
+#suichuan .qt-target-picker .sc-select-trigger { max-width: 200px; background: transparent; border-color: transparent; }
+#suichuan .qt-target-picker .sc-select-trigger:hover:not(:disabled), #suichuan .qt-target-picker .sc-select-trigger[aria-expanded="true"] { background: var(--qt-subtle); border-color: var(--qt-border); }
+.sc-select-menu { position: fixed; inset: auto; margin: 0; box-sizing: border-box; padding: 5px; border: 1px solid light-dark(#e0e0db, #42423d); border-radius: 11px; background: light-dark(#fff, #252523); color: light-dark(#333, #eeeee9); box-shadow: 0 8px 28px #0000001a, 0 2px 6px #0000000a; overflow: auto; overscroll-behavior: contain; font: 400 13px/20px -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+.sc-select-menu::backdrop { background: transparent; }
+.sc-select-option { position: relative; box-sizing: border-box; display: flex; align-items: center; min-height: 40px; padding: 9px 30px 9px 11px; border-radius: 6px; overflow-wrap: anywhere; cursor: pointer; }
+.sc-select-option[data-active], .sc-select-option:hover { background: light-dark(#f1f1ee, #363632); }
+.sc-select-option[aria-selected="true"] { font-weight: 550; }
+.sc-select-option[aria-selected="true"]::after { content: ""; position: absolute; right: 13px; top: 15px; width: 5px; height: 9px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); }
+.sc-select-option[aria-disabled="true"] { opacity: .45; cursor: default; }
+@media(max-width: 560px) {
+  #suichuan .qt-target-picker .sc-select-trigger { max-width: 155px; }
+}
+@media(max-width: 380px) {
+  #suichuan .qt-target-picker .sc-select-trigger { max-width: 138px; }
+}
 .site-tools { display: inline-flex; align-items: center; gap: 14px; margin-inline-start: auto; flex-shrink: 0; }
 .site-tools .locale-picker { margin-inline-start: 0; }
 .github-link { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; color: inherit; text-decoration: none; font-size: 12px; white-space: nowrap; }
