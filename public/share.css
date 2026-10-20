@@ -97,7 +97,6 @@
 #suichuan .share-panel-draft { border:0; padding:0; border-radius:0; }
 #suichuan .share-upload { padding-top:4px; border:1px solid var(--qt-border); border-radius:14px; background:var(--qt-bg); }
 #suichuan .share-upload .share-drop { min-height:108px; padding:20px 23px; text-align:left; font-size:15px; line-height:1.8; }
-#suichuan .qt-compose-footer .share-create { width:auto; padding:8px 13px; }
 #suichuan .share-mode-description { margin-top:10px; font-size:12px; color:var(--qt-muted); }
 #suichuan .share-settings { border-top:1px solid var(--qt-border); margin-top:16px; padding-top:14px; }
 #suichuan .share-settings > summary, #suichuan .share-more-actions > summary { width:max-content; font-size:12px; color:var(--qt-muted); cursor:pointer; border-radius:4px; }
