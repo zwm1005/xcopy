@@ -21,6 +21,8 @@ export class Connection extends EventTarget {
     config: ClientLimits = { maxFileBytes: 50 * 1048576, maxTextBytes: 1048576 };
     ws?: WebSocket;
     stopped = false;
+    suspended = false;
+    waking?: Promise<void>;
     timer?: ReturnType<typeof setTimeout>;
     override addEventListener<K extends keyof ConnectionEvents>(type: K, listener: (event: CustomEvent<ConnectionEvents[K]>) => void, options?: boolean | AddEventListenerOptions): void;
     override addEventListener(type: string, listener: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions): void;
@@ -78,7 +80,7 @@ export class Connection extends EventTarget {
                     }
                     else {
                         const detail = record(message.error) ? message.error : {};
-                        pending.reject(new RemoteError(typeof detail.code === 'string' ? detail.code : 'INVALID', { message: typeof detail.message === 'string' ? detail.message : t("connection.unable.to.process.the.request"), messageKey: typeof detail.messageKey === 'string' ? detail.messageKey : undefined, messageParams: record(detail.messageParams) ? Object.fromEntries(Object.entries(detail.messageParams).filter((entry): entry is [string, string | number] => typeof entry[1] === 'string' || typeof entry[1] === 'number')) : undefined }));
+                        pending.reject(new RemoteError(typeof detail.code === 'string' ? detail.code : 'INVALID', { message: typeof detail.message === 'string' ? detail.message : t("connection.unable.to.process.the.request"), messageKey: typeof detail.messageKey === 'string' ? detail.messageKey : undefined, messageParams: record(detail.messageParams) ? Object.fromEntries(Object.entries(detail.messageParams).filter((entry): entry is [string, string | number] => typeof entry[1] === 'string' || typeof entry[1] === 'number')) : undefined }, typeof detail.retryAfterMs === 'number' && Number.isFinite(detail.retryAfterMs) && detail.retryAfterMs > 0 ? detail.retryAfterMs : undefined));
                     }
                 }
             }
@@ -123,7 +125,7 @@ export class Connection extends EventTarget {
                 ws.close();
             }
         });
-        ws.addEventListener('close', () => {
+        ws.addEventListener('close', (event) => {
             this.ready = false;
             for (const p of this.pending.values()) {
                 clearTimeout(p.timer);
@@ -131,13 +133,56 @@ export class Connection extends EventTarget {
             }
             this.pending.clear();
             this.emit('disconnected', {});
-            if (!this.stopped) {
-                this.timer = setTimeout(() => this.connect(), Math.min(1000 * 2 ** this.attempt++, 10000));
+            this.suspended = this.guest && event.code === 1000 && event.reason === 'Guest session idle';
+            if (!this.stopped && !this.suspended) {
+                const delay = Math.min(1000 * 2 ** Math.min(this.attempt++, 6), 30000);
+                this.timer = setTimeout(() => this.connect(), delay * (0.75 + Math.random() * 0.5));
             }
         });
         ws.addEventListener('error', () => { });
     }
-    rpc<K extends RpcName>(type: K, ...args: RpcArgs<K>): Promise<RpcOutput<K>> {
+    private wake(): Promise<void> {
+        if (!this.waking) {
+            this.waking = new Promise<void>((resolve, reject) => {
+                const ready = () => { cleanup(); resolve(); };
+                const timer = setTimeout(() => { cleanup(); reject(new Error(t("connection.request.timed.out.please.try.again"))); }, 12000);
+                const cleanup = () => {
+                    clearTimeout(timer);
+                    this.removeEventListener('ready', ready);
+                    this.waking = undefined;
+                };
+                this.addEventListener('ready', ready);
+                this.suspended = false;
+                this.connect();
+            });
+        }
+        return this.waking;
+    }
+    async rpc<K extends RpcName>(type: K, ...args: RpcArgs<K>): Promise<RpcOutput<K>> {
+        if (this.stopped) {
+            throw new Error(t("connection.server.unavailable.waiting.to.reconnect"));
+        }
+        if (this.suspended || (this.waking && type !== 'guest.open')) {
+            await this.wake();
+        }
+        const deadline = Date.now() + 30000;
+        for (;;) {
+            try {
+                return await this.request(type, ...args);
+            }
+            catch (error) {
+                if ((type !== 'transfer.start' && type !== 'share.file.start') || !(error instanceof RemoteError) || error.code !== 'RATE_LIMIT' || !error.retryAfterMs || Date.now() + error.retryAfterMs > deadline || this.stopped || !this.ready) {
+                    throw error;
+                }
+                const socket = this.ws;
+                await new Promise((resolve) => setTimeout(resolve, error.retryAfterMs! + Math.random() * 100));
+                if (this.stopped || !this.ready || this.ws !== socket) {
+                    throw error;
+                }
+            }
+        }
+    }
+    private request<K extends RpcName>(type: K, ...args: RpcArgs<K>): Promise<RpcOutput<K>> {
         const data = args[0] ?? {};
         return new Promise<RpcOutput<K>>((resolve, reject) => {
             if (this.ws?.readyState !== WebSocket.OPEN || (!this.ready && !type.startsWith('auth.') && type !== 'guest.open')) {

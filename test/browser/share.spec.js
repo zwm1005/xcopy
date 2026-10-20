@@ -69,8 +69,12 @@ for (const mode of ['device', 'share']) {
       const icon = notice.locator('svg');
       await expect(icon).toBeVisible();
       await expect(icon).toHaveAttribute('aria-hidden', 'true');
-      const symbol = await icon.boundingBox();
-      const text = await notice.locator('span').boundingBox();
+      // Read both boxes in one DOM snapshot: a peers update may replace the
+      // notice between separate layout measurements.
+      const { symbol, text } = await notice.evaluate((node) => ({
+        symbol: node.querySelector('svg').getBoundingClientRect().toJSON(),
+        text: node.querySelector('span').getBoundingClientRect().toJSON()
+      }));
       expect(symbol.x + symbol.width).toBeLessThan(text.x);
       expect(Math.abs(symbol.y - text.y)).toBeLessThan(4);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

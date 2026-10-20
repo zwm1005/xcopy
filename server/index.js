@@ -13,6 +13,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { Store } from './store.js';
 import { loadConfig } from './config.js';
 import { createShares } from './shares.js';
+import { connectionQuotas, sourceKey, TokenBuckets } from './availability.js';
 import { validDeviceName } from '../src/shared/device-name.js';
 
 const publicDir = fileURLToPath(new URL('../dist/public/', import.meta.url));
@@ -43,13 +44,42 @@ export function createApp(overrides = {}) {
   const config = { ...loadConfig(), ...overrides };
   const store = new Store(config.dbPath);
   const sockets = new Set();
+  const pagesByDevice = new Map();
+  const activeByPair = new Map();
+  const activeCounts = new Map();
+  const dirtyDevices = new Set();
+  let publishTimer;
+  let closing = false;
   const sessions = new Map();
   const codes = new Map();
   const requests = new Map();
   const transfers = new Map();
   const limits = new Map();
   const now = overrides.now || Date.now;
-  const shares = createShares({ config, now, requireThat, rate, send, transfers, finish, iceServers, cleanName, deviceName: (id) => store.device(id).name });
+  const buckets = new TokenBuckets(now);
+  const quotas = connectionQuotas(config, requireThat);
+  const shares = createShares({ config, now, requireThat, rate, rateStart, send, transfers, registerTransfer, finish, iceServers, cleanName, deviceName: (id) => store.device(id).name });
+
+  function limited(wait) {
+    const error = new ClientError('RATE_LIMIT', '操作太频繁，请稍后再试');
+    error.retryAfterMs = Math.max(1, Math.ceil(wait));
+    return error;
+  }
+
+  function operation(ws, name, perMinute, burst, ipRate, ipBurst) {
+    const wait = buckets.take([
+      { key: `${name}:device:${ws.deviceId}`, perMinute, burst },
+      { key: `${name}:ip:${ws.source}`, perMinute: ipRate, burst: ipBurst }
+    ]);
+    if (wait) {
+      throw limited(wait);
+    }
+  }
+
+  function rateStart(ws) {
+    requireThat(ws.deviceId, 'UNAUTHORIZED', '请先验证设备身份');
+    operation(ws, 'start', config.transferRate, config.transferBurst, config.transferIpRate, config.transferIpBurst);
+  }
 
   function rate(key, limit, windowMs = 60000, cooldown = windowMs) {
     const time = now();
@@ -58,22 +88,42 @@ export function createApp(overrides = {}) {
       entry = { count: 0, until: time + windowMs, blockedUntil: 0 };
       limits.set(key, entry);
     }
-    requireThat(time >= entry.blockedUntil, 'RATE_LIMIT', '操作太频繁，请稍后再试');
+    if (time < entry.blockedUntil) {
+      throw limited(entry.blockedUntil - time);
+    }
     entry.count += 1;
     if (entry.count > limit) {
       entry.blockedUntil = time + cooldown;
-      throw new ClientError('RATE_LIMIT', '操作太频繁，请稍后再试');
+      throw limited(cooldown);
+    }
+  }
+
+  function retire(ws, code, reason) {
+    if (ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    ws.close(code, reason);
+    const timer = setTimeout(() => ws.terminate(), 2000);
+    timer.unref();
+    ws.once('close', () => clearTimeout(timer));
+  }
+
+  function frame(ws, data) {
+    if (ws?.readyState === WebSocket.OPEN) {
+      if (ws.bufferedAmount > config.maxBufferedBytes) {
+        retire(ws, 1013, 'Slow consumer');
+        return;
+      }
+      ws.send(JSON.stringify(data));
     }
   }
 
   function send(ws, type, data) {
-    if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type, data }));
-    }
+    frame(ws, { type, data });
   }
 
   function deviceSockets(id) {
-    return [...sockets].filter((ws) => ws.deviceId === id && ws.readyState === WebSocket.OPEN);
+    return [...(pagesByDevice.get(id) || [])].filter((ws) => ws.readyState === WebSocket.OPEN);
   }
 
   function reception(ws) {
@@ -91,20 +141,63 @@ export function createApp(overrides = {}) {
     return Boolean(store.relationship(a, b));
   }
 
+  function pairKey(a, b) {
+    return JSON.stringify([a, b].sort());
+  }
+
   function activeBetween(a, b) {
-    return [...transfers.values()].filter((t) => !terminal.has(t.status) && ((t.from === a && t.to === b) || (t.from === b && t.to === a)));
+    return activeByPair.get(pairKey(a, b)) || new Set();
+  }
+
+  function registerTransfer(t) {
+    requireThat((activeCounts.get(t.from) || 0) < config.maxActive && (activeCounts.get(t.to) || 0) < config.maxActive, 'BUSY', '传输任务较多，请稍后再试');
+    transfers.set(t.id, t);
+    activeCounts.set(t.from, (activeCounts.get(t.from) || 0) + 1);
+    activeCounts.set(t.to, (activeCounts.get(t.to) || 0) + 1);
+    if (!t.shareId) {
+      const key = pairKey(t.from, t.to);
+      const active = activeByPair.get(key) || new Set();
+      active.add(t);
+      activeByPair.set(key, active);
+    }
   }
 
   function peers(id) {
-    return store.peers(id).map((p) => ({ ...p, online: deviceSockets(p.id).length > 0, busy: activeBetween(id, p.id).length }));
+    return store.peers(id).map((p) => ({ ...p, online: deviceSockets(p.id).length > 0, busy: activeBetween(id, p.id).size }));
   }
 
-  function publish() {
-    for (const ws of sockets) {
-      if (ws.deviceId) {
-        send(ws, 'peers', { peers: peers(ws.deviceId), name: store.device(ws.deviceId).name, reception: reception(ws) });
+  function flushPublish() {
+    publishTimer = undefined;
+    const ids = [...dirtyDevices];
+    dirtyDevices.clear();
+    for (const id of ids) {
+      const pages = deviceSockets(id);
+      if (pages.length) {
+        const data = { peers: peers(id), name: store.device(id).name };
+        for (const ws of pages) {
+          send(ws, 'peers', { ...data, reception: { here: ws === pages[0], pages: pages.length } });
+        }
       }
     }
+  }
+
+  function publish(...ids) {
+    if (closing) {
+      return;
+    }
+    for (const id of ids) {
+      if (pagesByDevice.has(id)) {
+        dirtyDevices.add(id);
+      }
+    }
+    if (dirtyDevices.size && !publishTimer) {
+      publishTimer = setTimeout(flushPublish, config.publishInterval);
+      publishTimer.unref();
+    }
+  }
+
+  function publishPresence(id) {
+    publish(id, ...store.peers(id).map((peer) => peer.id));
   }
 
   function iceServers(id, allowRelay = true) {
@@ -124,12 +217,29 @@ export function createApp(overrides = {}) {
     t.status = status;
     t.reason = reason;
     t.updated = now();
+    for (const id of [t.from, t.to]) {
+      const count = activeCounts.get(id) - 1;
+      if (count) {
+        activeCounts.set(id, count);
+      } else {
+        activeCounts.delete(id);
+      }
+    }
+    if (!t.shareId) {
+      const key = pairKey(t.from, t.to);
+      const active = activeByPair.get(key);
+      active.delete(t);
+      if (!active.size) {
+        activeByPair.delete(key);
+      }
+    }
     send(t.sender, 'transfer.state', { id: t.id, status, reason, ...messageDescriptor(reason, 'reason') });
     send(t.receiver, 'transfer.state', { id: t.id, status, reason, ...messageDescriptor(reason, 'reason') });
     if (t.shareId) {
       shares.finished(t);
+    } else {
+      publish(t.from, t.to);
     }
-    publish();
   }
 
   function endRequest(id, status) {
@@ -187,13 +297,17 @@ export function createApp(overrides = {}) {
       return { challenge, fingerprint };
     }
     if (type === 'auth.finish') {
-      requireThat(!ws.deviceId, 'INVALID', '已经验证身份');
+      requireThat(!ws.deviceId && !ws.guestId, 'INVALID', '已经验证身份');
       const c = ws.challenge;
       ws.challenge = null;
       requireThat(c && c.expires > now(), 'AUTH_FAILED', '身份验证失败，请重试');
       requireThat(typeof data.signature === 'string' && data.signature.length < 200 && verify('sha256', Buffer.from(c.challenge), { key: c.key, dsaEncoding: 'ieee-p1363' }, Buffer.from(data.signature, 'base64')), 'AUTH_FAILED', '身份验证失败，请重试');
       const device = store.register(c.fingerprint, c.publicKey, c.name, now());
+      ws.quota.device(device.id);
       ws.deviceId = device.id;
+      const pages = pagesByDevice.get(device.id) || new Set();
+      pages.add(ws);
+      pagesByDevice.set(device.id, pages);
       ws.sessionId = randomId();
       sessions.set(ws.sessionId, ws);
       let resumed = false;
@@ -216,7 +330,7 @@ export function createApp(overrides = {}) {
           store.pair(device.id, peer.id, now());
         }
       }
-      publish();
+      publishPresence(device.id);
       return { device: { id: device.id, name: device.name }, sessionId: ws.sessionId, resumed, peers: peers(device.id), reception: reception(ws), config: { maxFileBytes: config.maxFileBytes, maxRelayFileBytes: config.maxFileBytes, maxTextBytes: config.maxTextBytes, forceRelay: config.forceRelay, hasTurn: config.turnUrls.length > 0 }, tasks: [...transfers.values()].filter((t) => t.sender === ws || t.receiver === ws).map((t) => ({ id: t.id, status: t.status })) };
     }
 
@@ -225,8 +339,12 @@ export function createApp(overrides = {}) {
       case 'peers.list':
         return { peers: peers(ws.deviceId) };
       case 'device.rename': {
-        store.rename(ws.deviceId, cleanName(data.name));
-        publish();
+        operation(ws, 'rename', config.renameRate, config.renameBurst, config.renameIpRate, config.renameIpBurst);
+        const name = cleanName(data.name);
+        if (store.device(ws.deviceId).name !== name) {
+          store.rename(ws.deviceId, name);
+          publishPresence(ws.deviceId);
+        }
         return {};
       }
       case 'pair.code': {
@@ -273,35 +391,34 @@ export function createApp(overrides = {}) {
         }
         store.pair(r.owner, r.from, now());
         endRequest(data.id, 'paired');
-        publish();
+        publish(r.owner, r.from);
         return {};
       }
       case 'pair.forget': {
         requireThat(typeof data.peerId === 'string' && store.relationship(ws.deviceId, data.peerId), 'NOT_FOUND', '配对关系不存在');
         // All mutation handlers are synchronous on one process: check + revoke cannot
         // interleave with transfer.start, including requests from another browser tab.
-        requireThat(activeBetween(ws.deviceId, data.peerId).length === 0, 'BUSY', '传输结束后可忘记配对');
+        requireThat(activeBetween(ws.deviceId, data.peerId).size === 0, 'BUSY', '传输结束后可忘记配对');
         store.removePair(ws.deviceId, data.peerId);
         emitDevice(ws.deviceId, 'pair.forgotten', { peerId: data.peerId });
         emitDevice(data.peerId, 'pair.forgotten', { peerId: ws.deviceId });
-        publish();
+        publish(ws.deviceId, data.peerId);
         return {};
       }
       case 'transfer.start': {
+        rateStart(ws);
         requireThat(typeof data.peerId === 'string' && validPair(ws.deviceId, data.peerId), 'NOT_PAIRED', '尚未配对或已忘记配对，请重新连接');
         const receiver = deviceSockets(data.peerId)[0];
         requireThat(receiver, 'OFFLINE', '接收设备不在线');
-        const active = [...transfers.values()].filter((t) => !terminal.has(t.status));
-        requireThat(active.filter((t) => t.from === ws.deviceId || t.to === ws.deviceId).length < config.maxActive && active.filter((t) => t.from === data.peerId || t.to === data.peerId).length < config.maxActive, 'BUSY', '传输任务较多，请稍后再试');
         const m = data.metadata;
         requireThat(m && ['text', 'file', 'image'].includes(m.kind) && Number.isSafeInteger(m.size) && m.size >= 0 && (m.kind !== 'text' || m.size <= config.maxTextBytes), 'SIZE_LIMIT', '内容大小无效或文字超出限制');
         requireThat(typeof m.name === 'string' && m.name.length <= 255 && typeof m.mime === 'string' && m.mime.length <= 100, 'INVALID', '文件信息无效');
         const id = randomId();
         const policy = { directOnly: m.size > config.maxFileBytes, maxRelayFileBytes: config.maxFileBytes, forceRelay: config.forceRelay };
         const t = { id, ...policy, from: ws.deviceId, to: data.peerId, sender: ws, receiver, status: 'waiting', created: now(), updated: now() };
-        transfers.set(id, t);
+        registerTransfer(t);
         send(receiver, 'transfer.offer', { id, ...policy, peerId: t.from, peerName: store.device(t.from).name, metadata: { kind: m.kind, size: m.size, name: m.name, mime: m.mime }, iceServers: iceServers(t.to, !policy.directOnly) });
-        publish();
+        publish(t.from, t.to);
         return { id, ...policy, iceServers: iceServers(t.from, !policy.directOnly) };
       }
       case 'transfer.accept': {
@@ -428,15 +545,18 @@ export function createApp(overrides = {}) {
   server.on('upgrade', (req, socket, head) => {
     try {
       requireThat(req.headers.origin === config.origin && req.url === '/ws', 'FORBIDDEN', 'Origin rejected');
-      const source = config.trustProxy ? String(req.headers['x-forwarded-for'] || req.socket.remoteAddress).split(',')[0].trim() : req.socket.remoteAddress;
+      const source = sourceKey(config.trustProxy ? String(req.headers['x-forwarded-for'] || req.socket.remoteAddress).split(',')[0].trim() : req.socket.remoteAddress);
+      requireThat(source, 'FORBIDDEN', 'Origin rejected');
       rate(`connect:${source}`, config.connectLimit ?? 60);
-      requireThat(sockets.size < 1000, 'BUSY', 'Too many connections');
+      const quota = quotas.reserve(source, socket);
       wss.handleUpgrade(req, socket, head, (ws) => {
         ws.source = source;
+        ws.quota = quota;
         wss.emit('connection', ws);
       });
-    } catch {
-      socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+    } catch (error) {
+      const status = error.code === 'RATE_LIMIT' ? '429 Too Many Requests' : error.code === 'BUSY' ? '503 Service Unavailable' : '403 Forbidden';
+      socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\nRetry-After: 5\r\n\r\n`, () => socket.destroy());
     }
   });
 
@@ -447,23 +567,41 @@ export function createApp(overrides = {}) {
     ws.on('pong', () => { ws.alive = true; });
     ws.on('error', () => {});
     ws.on('message', (raw, isBinary) => {
+      if (ws.readyState !== WebSocket.OPEN) {
+        return;
+      }
+      if (buckets.take([{ key: `messages:${ws.source}`, perMinute: config.messageRate, burst: config.messageBurst }])) {
+        retire(ws, 1008, 'Message rate exceeded');
+        return;
+      }
       let message;
       try {
         requireThat(!isBinary, 'INVALID', '这里只接受控制消息');
-        rate(`messages:${ws.source}`, 3000);
         message = JSON.parse(raw.toString());
         requireThat(typeof message.id === 'string' && message.id.length <= 80 && typeof message.type === 'string', 'INVALID', '请求格式错误');
+        rate(`messages:${ws.source}`, config.messageRate);
         const data = handle(ws, message.type, message.data);
-        ws.send(JSON.stringify({ replyTo: message.id, ok: true, data }));
+        frame(ws, { replyTo: message.id, ok: true, data });
       } catch (error) {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ replyTo: message?.id, ok: false, error: { code: error instanceof ClientError ? error.code : 'INVALID', message: error instanceof ClientError ? error.message : '请求无法处理', ...messageDescriptor(error instanceof ClientError ? error.message : '请求无法处理') } }));
+        frame(ws, { replyTo: message?.id, ok: false, error: { code: error instanceof ClientError ? error.code : 'INVALID', message: error instanceof ClientError ? error.message : '请求无法处理', ...(error.retryAfterMs ? { retryAfterMs: error.retryAfterMs } : {}), ...messageDescriptor(error instanceof ClientError ? error.message : '请求无法处理') } });
+        if (error.code === 'BUSY' && !ws.deviceId && !ws.guestId) {
+          retire(ws, 1013, 'Connection quota reached');
         }
       }
     });
     ws.on('close', () => {
       sockets.delete(ws);
       ws.closedAt = now();
+      if (ws.deviceId) {
+        const pages = pagesByDevice.get(ws.deviceId);
+        pages.delete(ws);
+        if (!pages.size) {
+          pagesByDevice.delete(ws.deviceId);
+        }
+      }
+      if (closing) {
+        return;
+      }
       shares.disconnected(ws);
       for (const [id, r] of requests) {
         if (r.requester === ws || (r.owner === ws.deviceId && !deviceSockets(ws.deviceId).length)) {
@@ -477,12 +615,19 @@ export function createApp(overrides = {}) {
           }
         }
       }
-      publish();
+      if (ws.deviceId) {
+        if (deviceSockets(ws.deviceId).length) {
+          publish(ws.deviceId);
+        } else {
+          publishPresence(ws.deviceId);
+        }
+      }
     });
   });
 
   function sweep() {
     shares.sweep();
+    buckets.sweep();
     for (const [code, c] of codes) {
       if (c.expires <= now()) {
         invalidateCode(code);
@@ -512,7 +657,14 @@ export function createApp(overrides = {}) {
     }
     for (const ws of sockets) {
       if (!ws.deviceId && !ws.guestId && now() - ws.openedAt > config.challengeTtl) {
-        ws.close(1008, 'Authentication timeout');
+        retire(ws, 1008, 'Authentication timeout');
+      }
+      if (ws.guestId) {
+        if (shares.retains(ws)) {
+          ws.guestIdleSince = now();
+        } else if (now() - ws.guestIdleSince > config.guestIdleTimeout) {
+          retire(ws, 1000, 'Guest session idle');
+        }
       }
     }
   }
@@ -523,10 +675,11 @@ export function createApp(overrides = {}) {
         ws.terminate();
         continue;
       }
-      ws.alive = false;
-      ws.ping();
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.alive = false;
+        ws.ping();
+      }
     }
-    publish();
   }, 15000);
   maintenance.unref();
   heartbeat.unref();
@@ -534,15 +687,21 @@ export function createApp(overrides = {}) {
   return {
     server, store, config, sweep,
     listen: () => new Promise((resolveListen) => server.listen(config.port, config.host, () => resolveListen(server.address()))),
-    close: () => new Promise((resolveClose) => {
+    close: async () => {
+      closing = true;
       clearInterval(maintenance);
       clearInterval(heartbeat);
+      clearTimeout(publishTimer);
+      dirtyDevices.clear();
       for (const ws of sockets) {
         ws.terminate();
       }
-      wss.close();
-      server.close(() => { store.close(); resolveClose(); });
-    })
+      await Promise.all([
+        new Promise((done) => wss.close(done)),
+        new Promise((done) => server.close(done))
+      ]);
+      store.close();
+    }
   };
 }
 

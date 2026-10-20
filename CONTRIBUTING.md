@@ -113,6 +113,34 @@ docker compose -f compose.yaml -f compose.turn.yaml up -d --no-deps --force-recr
 
 分享资源限制：`SHARE_CONCURRENCY` 默认 3（范围 1–3），`SHARE_QUEUE_LIMIT` 默认 20，`SHARE_GLOBAL_CLAIMS` 默认 256 个在途领取，`SHARE_WATCHER_LIMIT` 默认每份分享 200 个在线预览订阅。它们不限制累计完成次数。基础 Compose 已映射前两项；需修改后两项时，应同时添加对应的容器环境变量映射。
 
+### WebSocket 可用性保护
+
+以下限制按单个 Node 进程生效，不需要数据库迁移。连接配额在握手时预留，并在底层 TCP 连接关闭后释放，涵盖认证失败、异常断开及关闭握手。所有连接共用每 IP 配额；新生成密钥的设备同样受限。IPv4 与对应的 IPv4-mapped 地址共用预算，IPv6 按 /64 汇总。
+
+| 环境变量 | 默认值 | 用途 |
+| --- | --- | --- |
+| `WS_MAX_CONNECTIONS` | 1000 | 全局连接上限 |
+| `WS_MAX_CONNECTIONS_PER_IP` | 64 | 每个来源的并发上限，包含待认证、设备和访客 |
+| `WS_MAX_CONNECTIONS_PER_DEVICE` | 8 | 同一设备的标签页与 CLI 连接上限 |
+| `WS_MAX_PENDING_CONNECTIONS` / `WS_MAX_PENDING_PER_IP` | 128 / 8 | 待认证连接的全局 / 来源上限 |
+| `WS_MAX_GUEST_CONNECTIONS` | 256 | 已建立访客会话的全局上限 |
+| `WS_GUEST_IDLE_SECONDS` | 60 | 没有关联有效分享或在途领取的访客宽限期 |
+| `WS_PUBLISH_INTERVAL_MS` | 50 | 设备状态更新的合并窗口 |
+| `WS_MAX_BUFFERED_KB` | 1024 | 慢客户端待发送队列上限，超过后断开 |
+| `WS_MESSAGE_RATE_PER_MINUTE` / `WS_MESSAGE_BURST` | 3000 / 256 | 每来源消息总量和令牌桶突发容量 |
+| `WS_RENAME_RATE_PER_MINUTE` / `WS_RENAME_BURST` | 10 / 3 | 每设备改名的补充速率和突发容量 |
+| `WS_RENAME_IP_RATE_PER_MINUTE` / `WS_RENAME_IP_BURST` | 60 / 12 | 每来源改名的补充速率和突发容量 |
+| `WS_TRANSFER_RATE_PER_MINUTE` / `WS_TRANSFER_BURST` | 600 / 16 | 每设备创建传输的补充速率和突发容量 |
+| `WS_TRANSFER_IP_RATE_PER_MINUTE` / `WS_TRANSFER_IP_BURST` | 1800 / 48 | 每来源创建传输的补充速率和突发容量 |
+
+限流在昂贵处理之前执行。普通传输与分享文件共用创建预算；合法的结束消息不消耗创建或改名预算，重复结束不会再次更新数据库或广播。浏览器和 CLI 根据 `RATE_LIMIT.retryAfterMs` 在 30 秒内重试创建，不重放其他变更请求。硬性消息突发超限会断开连接。
+
+访客响应 pong 或发送无效请求不会延长宽限期。有效预览、排队和正在领取的访客保持连接，分享过期后已准入的领取仍可完成。业务结束后回收空闲访客，浏览器暂停自动重连，已接收文件仍可在当前页面保存。设备页面继续长期在线等待接收。
+
+设备状态仅推送到受影响设备及必要的配对设备，同设备的标签页共用查询快照；心跳不查询数据库或刷新全站列表。身份认证、配对、撤销和传输授权仍同步完成，合并窗口仅影响列表显示。
+
+基础 Compose 已映射上述变量；systemd 将需要覆盖的值加入 `/etc/suichuan/app.env`。共享出口较多时，可按实际并发调整每 IP 配额。`TRUST_PROXY=1` 必须配合受控代理覆盖来源头、禁止公网直连应用端口；横向扩容需要共享配额或在入口统一限流，不能将每进程配额视为集群配额。以上措施控制应用资源消耗，分布式洪泛仍需入口防护。
+
 ### 构建与 systemd 发布
 
 构建先在临时目录编译、复制资源并校验白名单和引用闭包，成功后替换完整 `dist/`，失败保留上一份产物。Docker 使用多阶段构建，运行镜像只安装运行依赖。
