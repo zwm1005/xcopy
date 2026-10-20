@@ -136,3 +136,21 @@ docker compose -f compose.yaml -f compose.turn.yaml up -d --no-deps --force-recr
 `robots.txt` 允许抓取首页、样式、脚本和站点地图，只排除 API、WebSocket 和健康检查路径。不要使用 `Disallow: /s`，它也会阻止 `/sitemap.xml`、`/styles.css` 等资源。发送页及分享页允许读取 `noindex`，但通过 HTML 元标签与 `X-Robots-Tag` 阻止收录。
 
 发布后可用 IndexNow 将两种语言的 canonical URL 提交给参与该协议的搜索引擎，携带当前 `/indexnow.txt` 的 key 和 `keyLocation`。HTTP 200/202 仅代表收到通知或等待验证，不代表已经收录。Google Search Console 与百度搜索资源平台仍需站点所有者完成验证后提交 `sitemap.xml`；不要使用已废弃的 sitemap ping 接口，也不要将普通网页提交到只面向特定内容类型的 Google Indexing API。
+
+### 可选访问统计
+
+统计默认关闭，不依赖管理平台启动。保持 `ANALYTICS_ENABLED=0` 时，页面不注入统计脚本、不请求采集接口、不创建统计 Cookie，也不连接作者的统计服务。脚本与传输代码独立；开启后，上报失败不会阻塞配对、分享和文件传输。
+
+需要自建统计时，使用自己的管理后端和数据库：
+
+1. 在 `wf-admin-web` 的管理数据库执行独立增量脚本 `sql/20261020_analytics_tables.sql` 与 `sql/20261020_analytics_menu.sql`，配置 Java 端 `analytics.*`。详见该项目 README 的“可选随传访问统计”。这一步不会修改随传的 SQLite 数据库。
+2. 使用 Nginx 的部署可参考 [公开路由模板](deploy/aliyun/analytics.nginx.conf.example) 和[私有代理片段模板](deploy/aliyun/analytics-private.nginx.conf.example)。复制到服务器后修改 Java 私网地址、站点代码和代理密钥，在网站的 HTTPS `server` 块中 include 路由文件。私有片段须由 root 持有、权限 `600`，不得提交 Git。执行 `nginx -t` 后 reload。使用 Caddy 等代理时，须等价配置两个精确路径、请求方法和可信头；默认 Compose 不包含统计代理。
+3. Java 端默认也关闭。配置独立随机代理密钥与 HMAC 密钥（每个至少 32 字符）、自己的精确 HTTPS origin 和 Nginx 出口 IP/CIDR；只允许代理机器访问 Java 端口。Nginx 必须覆盖客户端 IP 头。若前面还有 CDN，只信任该 CDN 官方地址段，不接受任意客户端的 `X-Forwarded-For`。
+4. 随传 `.env` 设置 `ANALYTICS_ENABLED=1`、`ANALYTICS_PATH=/api/analytics`。重启 systemd 服务；Compose 使用 `docker compose up -d --force-recreate app`（服务名以实际配置为准）。开关在服务启动时生效，无需修改业务代码。默认路径分别为 `GET /api/analytics/bootstrap` 和 `POST /api/analytics/events`。
+5. 使用独立浏览器配置打开首页，检查同源 Cookie 与 204 入库响应；管理端“随传统计”可查看数据。访问 `/analytics-privacy` 阅读说明，`/?analytics=off` 排除此浏览器，`/?analytics=on` 恢复；偏好保留 90 天。不要把管理员 Token、代理密钥或 HMAC 密钥配置到前端。
+
+目前采集首页、传输页和领取页的 PV，以及首页进入传输页、切换设备/分享 tab 的点击。只记录归一页面、语言、来源域名、有限 UTM 字段和客户端类别；分享令牌、完整 URL、传输内容、剪贴板、文件名与文件内容均不进入事件。原始 IP 由可信代理提供，保留 30 天；明细 90 天；日汇总 13 个月。采集从开启时开始，没有历史数据回填。
+
+停用时，将网站开关恢复 `0` 并重启，移除统计代理，然后将 Java 开关恢复 `false` 并重启。已收集的数据会保留；关闭 Java 后定时清理也停止，如需保留清理，应先只关闭网站和代理，再按保留期限清理后关闭 Java。无需删除统计表即可回退。网站、代理访问日志及数据库备份另行设置轮转期限。
+
+埋点专项浏览器验证：`npm run build && npx playwright test test/browser/analytics.spec.js`。默认关闭与资源隔离同时由 `npm test` 验证。

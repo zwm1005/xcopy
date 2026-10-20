@@ -89,7 +89,7 @@ test('fresh build, exact public routes, discovery HEAD, runtime defaults and pri
           assert.equal((await fetch(origin + path)).status, 404, path);
         }
         for (const path of Object.keys(JSON.parse(await readFile(new URL('../dist/build-manifest.json', import.meta.url), 'utf8')).files)) {
-          assert.equal((await fetch(origin + path)).status, 200, path);
+          assert.equal((await fetch(origin + path)).status, path === '/analytics.js' ? 404 : 200, path);
         }
       } finally {
         await app.close();
