@@ -1,3 +1,4 @@
+import { returningVisitor } from './smoke-visitor.js';
 import { chromium, expect as baseExpect } from '@playwright/test';
 import { mkdir, readFile, writeFile, access } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
@@ -34,6 +35,7 @@ async function openPage(context) {
 
 async function device(name) {
   const context = await browser.newContext({ locale: 'zh-CN', permissions: ['clipboard-read', 'clipboard-write'] });
+  await returningVisitor(context);
   const entry = { context };
   devices.push(entry);
   entry.page = await openPage(context);
@@ -141,10 +143,12 @@ try {
   });
   await step('首次引导、一次性命名、空白校验和 320px 窄屏', async () => {
     const context = await browser.newContext({ locale: 'zh-CN' });
+    await returningVisitor(context);
     const entry = { context, page: await openPage(context) };
     devices.push(entry);
     const page = entry.page;
-    await expect(page.getByRole('region', { name: '首次连接引导' })).toBeVisible();
+    await expect(page.locator('[data-onboarding]')).toHaveCount(0);
+    await expect(page.locator('[data-target] option:checked')).toHaveText('请先添加设备');
     await expect(page.locator('[data-action="send"]')).toBeDisabled();
     for (const width of [1280, 320]) {
       await page.setViewportSize({ width, height: 900 });
@@ -152,7 +156,7 @@ try {
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.screenshot({ path: join(artifacts, `首次连接-${width}.png`), fullPage: true });
     }
-    await page.getByRole('button', { name: '连接第一台设备' }).click();
+    await page.locator('[data-action="connect"]').click();
     await expect(page.getByRole('heading', { name: '给这台设备起个名字' })).toBeVisible();
     await page.getByRole('textbox', { name: '本机名称' }).fill('   ');
     await page.getByRole('button', { name: '保存并继续' }).click();

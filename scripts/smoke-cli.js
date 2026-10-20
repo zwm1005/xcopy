@@ -1,3 +1,4 @@
+import { returningVisitor } from './smoke-visitor.js';
 import { assertFrontend } from './frontend-artifact.js';
 import { chromium, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
@@ -89,6 +90,7 @@ try {
   const before = await cli(['status']);
   browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--no-proxy-server'] });
   const context = await browser.newContext({ locale: 'zh-CN' });
+  await returningVisitor(context);
   await context.addInitScript(({ relay }) => {
     const PC = window.RTCPeerConnection;
     window.__xcopyIceErrors = [];
