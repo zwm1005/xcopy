@@ -21,9 +21,6 @@ export class TransferFeedback {
         continue;
       }
       if (item.incoming) {
-        if (item.kind === 'text') {
-          continue;
-        }
         if (item.status === 'completed' && item.verified && !this.received.has(item)) {
           this.received.add(item);
           events.push({ kind: 'received', key: item.localId, items: [item] });
