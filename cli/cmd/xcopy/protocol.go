@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -23,10 +24,17 @@ type message struct {
 	OK      bool            `json:"ok"`
 	Type    string          `json:"type"`
 	Data    json.RawMessage `json:"data"`
-	Error   struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	} `json:"error"`
+	Error   rpcError        `json:"error"`
+}
+
+type rpcError struct {
+	Code         string `json:"code"`
+	Message      string `json:"message"`
+	RetryAfterMS int64  `json:"retryAfterMs"`
+}
+
+func (e *rpcError) Error() string {
+	return fmt.Sprintf("%s: %s", e.Code, e.Message)
 }
 
 type wire struct {
@@ -92,6 +100,28 @@ func connect(ctx context.Context, server string, event func(message)) (*wire, er
 }
 
 func (w *wire) call(kind string, data any, result any) error {
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		err := w.callOnce(kind, data, result)
+		var remote *rpcError
+		if kind != "transfer.start" || !errors.As(err, &remote) || remote.Code != "RATE_LIMIT" || remote.RetryAfterMS <= 0 || remote.RetryAfterMS > 30000 {
+			return err
+		}
+		delay := time.Duration(remote.RetryAfterMS)*time.Millisecond + 25*time.Millisecond
+		if time.Now().Add(delay).After(deadline) {
+			return err
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-w.done:
+			timer.Stop()
+			return fmt.Errorf("服务器连接中断")
+		case <-timer.C:
+		}
+	}
+}
+
+func (w *wire) callOnce(kind string, data any, result any) error {
 	id := newID()
 	ch := make(chan message, 1)
 	w.mu.Lock()
@@ -114,7 +144,7 @@ func (w *wire) call(kind string, data any, result any) error {
 		return fmt.Errorf("%s 请求超时", kind)
 	case m := <-ch:
 		if !m.OK {
-			return fmt.Errorf("%s: %s", m.Error.Code, m.Error.Message)
+			return &m.Error
 		}
 		if result != nil {
 			return json.Unmarshal(m.Data, result)

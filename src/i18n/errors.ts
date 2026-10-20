@@ -37,7 +37,7 @@ export function messageText(message = '', messageKey?: string, messageParams?: M
   return translate(descriptor.messageKey || '', descriptor.messageParams);
 }
 export class RemoteError extends Error {
-  constructor(public code: string, private descriptor: MessageDescriptor) {
+  constructor(public code: string, private descriptor: MessageDescriptor, public retryAfterMs?: number) {
     super(descriptor.message);
     Object.defineProperty(this, 'message', { get: () => messageText(descriptor.message, descriptor.messageKey, descriptor.messageParams) });
   }

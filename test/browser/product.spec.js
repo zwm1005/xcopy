@@ -99,6 +99,7 @@ test('同名设备可区分，目标离线、刷新和解除配对均不会自�
     await pair(a.page, b.page);
     await pair(a.page, c.page);
     await expect(a.page.locator('[data-onboarding]')).toBeHidden();
+    await expect(a.page.locator('[data-target] option:not([value="all-online"])')).toHaveCount(2);
     const choices = await a.page.locator('[data-target] option').evaluateAll((options) => options.filter((option) => option.value !== 'all-online').map((option) => ({ id: option.value, label: option.textContent })));
     expect(choices).toHaveLength(2);
     expect(choices[0].label).toMatch(/^我的电脑 · [a-f0-9]+$/);

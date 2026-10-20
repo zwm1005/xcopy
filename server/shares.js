@@ -9,7 +9,7 @@ const claimEnded = new Set(['completed', 'cancelled', 'expired', 'unavailable'])
 const taskEnded = new Set(['completed', 'failed', 'cancelled']);
 
 // 分享和领取会话分别授权；文件内容仅保留在发送、接收页面。
-export function createShares({ config, now, requireThat, rate, send, transfers, finish, iceServers, cleanName, deviceName }) {
+export function createShares({ config, now, requireThat, rate, rateStart, send, transfers, registerTransfer, finish, iceServers, cleanName, deviceName }) {
   const shares = new Map();
   const tokens = new Map();
   const guests = new Map();
@@ -74,6 +74,7 @@ export function createShares({ config, now, requireThat, rate, send, transfers, 
     }
     c.state = state;
     c.reason = reason;
+    c.receiver?.guestClaims?.delete(s.id);
     if (state === 'completed') {
       s.completed += 1;
     } else {
@@ -184,7 +185,7 @@ export function createShares({ config, now, requireThat, rate, send, transfers, 
       publish(s);
     }
     const mine = ownClaim(s, ws);
-    if (!mine || !claimEnded.has(mine.state)) {
+    if (!closed.has(s.status) && (!mine || !claimEnded.has(mine.state))) {
       requireThat(s.watchers.size < (config.shareWatcherLimit ?? 200) || s.watchers.has(ws), 'BUSY', '当前访问较多，请稍后重试');
       ws.shareView = s.id;
       s.watchers.add(ws);
@@ -195,6 +196,7 @@ export function createShares({ config, now, requireThat, rate, send, transfers, 
   function resume(old, ws) {
     ws.lastClaim = old.lastClaim;
     ws.claimReceipt = old.claimReceipt;
+    ws.guestClaims = old.guestClaims;
     for (const s of shares.values()) {
       if (s.sender === old) {
         s.sender = ws;
@@ -228,6 +230,9 @@ export function createShares({ config, now, requireThat, rate, send, transfers, 
         old = null;
       }
       const name = data.name === undefined ? `Device-${randomBytes(2).toString('hex').toUpperCase()}` : cleanName(data.name);
+      ws.quota.guest();
+      ws.guestIdleSince = now();
+      ws.guestClaims = new Set();
       ws.guestName = old?.guestName || name;
       ws.shareProtocol = data.shareProtocol;
       ws.guestId = randomId();
@@ -296,6 +301,7 @@ export function createShares({ config, now, requireThat, rate, send, transfers, 
         files: s.files.map(() => ({ completed: false, taskId: null })) };
       ws.guestName = recipientName;
       ws.lastClaim = c.id;
+      ws.guestClaims.add(s.id);
       ws.claimReceipt = null;
       s.claims.set(c.id, c);
       if (s.mode === 'single') {
@@ -362,6 +368,7 @@ export function createShares({ config, now, requireThat, rate, send, transfers, 
       }), ...limits };
     }
     if (type === 'share.file.start') {
+      rateStart(ws);
       const s = owned(ws, data.id);
       const c = data.claimId ? s.claims.get(data.claimId) : s.mode === 'single' ? [...s.claims.values()][0] : null;
       requireThat(c && !closed.has(s.status) && !claimEnded.has(c.state) && online(c.receiver), 'SHARE_CLOSED', '领取页面已离线或本次领取已结束');
@@ -369,12 +376,11 @@ export function createShares({ config, now, requireThat, rate, send, transfers, 
       const f = c.files[data.index];
       requireThat(!f.completed && (!f.taskId || taskEnded.has(transfers.get(f.taskId)?.status) || !transfers.has(f.taskId)), 'BUSY', '文件已接收或正在传输');
       requireThat(c.state === 'transferring', 'BUSY', '本次领取正在排队或等待重试');
-      requireThat([...transfers.values()].filter((t) => !taskEnded.has(t.status) && (t.sender === ws || t.receiver === c.receiver)).length < config.maxActive, 'BUSY', '传输任务较多，请稍后重试');
       const id = randomId();
-      f.taskId = id;
       const policy = { directOnly: s.files[data.index].size > config.maxFileBytes, maxRelayFileBytes: config.maxFileBytes, forceRelay: config.forceRelay };
       const t = { id, ...policy, shareId: s.id, claimId: c.id, shareIndex: data.index, from: ws.deviceId, to: c.receiver.guestId, sender: ws, receiver: c.receiver, status: 'waiting', created: now(), updated: now() };
-      transfers.set(id, t);
+      registerTransfer(t);
+      f.taskId = id;
       send(c.receiver, 'transfer.offer', { id, ...policy, peerId: t.from, peerName: s.senderName, metadata: { ...s.files[data.index], shareId: s.id, claimId: c.id, shareIndex: data.index }, iceServers: iceServers(t.to, !policy.directOnly) });
       return { id, ...policy, iceServers: iceServers(t.from, !policy.directOnly) };
     }
@@ -383,6 +389,13 @@ export function createShares({ config, now, requireThat, rate, send, transfers, 
 
   return {
     handle, resume, limits,
+    retains(ws) {
+      if (ws.guestClaims?.size) {
+        return true;
+      }
+      const s = shares.get(ws.shareView);
+      return Boolean(s && !closed.has(s.status) && s.accepting && now() < s.expires && s.watchers.has(ws));
+    },
     authorized(t) {
       const s = shares.get(t.shareId);
       if (s) {
