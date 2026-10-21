@@ -540,7 +540,13 @@ export class Transfers extends EventTarget {
             item.status = 'completed';
             item.chunks = [];
             item.parts = [];
-            item.channel.send(JSON.stringify({ type: 'ack' }));
+            try {
+                item.channel.send(JSON.stringify({ type: 'ack' }));
+            }
+            catch {
+                // Verified local receipt still needs server notification and cleanup
+                // when the channel closes before the acknowledgement can leave.
+            }
             this.endRemote(item.id, 'completed');
             this.changed(true);
             setTimeout(() => this.closePeer(item), 1500);

@@ -264,6 +264,63 @@ test('files are read and checked in bounded blocks with the original SHA-256 wir
   assert.deepEqual(Buffer.from(await receiver.blob.arrayBuffer()), content);
 });
 
+for (const [kind, content] of [['text', Buffer.from('文字 🍓\n')], ['file', Buffer.from([0, 255, 42])], ['file', Buffer.alloc(0)]]) {
+  test(`verified ${kind} receipt (${content.length} bytes) completes cleanup when ACK send throws`, async t => {
+    const { connection, transfers } = setup(t);
+    await transfers.receive({ id: 'ack-failure', peerId: 'b', metadata: { kind, name: 'received', size: content.length }, iceServers: [] });
+    await settle();
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const item = transfers.byId.get('ack-failure');
+    let closed = 0;
+    item.pc.close = () => { closed++; };
+    let changes = 0;
+    transfers.addEventListener('change', () => { changes++; });
+    let attempts = 0;
+    const channel = {
+      readyState: 'open',
+      send() {
+        attempts++;
+        throw new DOMException('Channel closed', 'InvalidStateError');
+      }
+    };
+    transfers.bindChannel(item, channel);
+    channel.onmessage({ data: content.buffer.slice(content.byteOffset, content.byteOffset + content.length) });
+    channel.onmessage({ data: JSON.stringify({ type: 'end', hash: createHash('sha256').update(content).digest('hex') }) });
+    await item.receiveQueue;
+    channel.onclose();
+    await Promise.resolve();
+    t.mock.timers.tick(100);
+    assert.equal(item.status, 'completed');
+    assert.equal(item.verified, true);
+    assert.equal(attempts, 1);
+    assert.deepEqual(Buffer.from(await item.blob.arrayBuffer()), content);
+    if (kind === 'text') {
+      assert.equal(item.text, content.toString());
+    }
+    assert.deepEqual(connection.ends, [{ id: item.id, status: 'completed' }]);
+    assert.ok(changes > 0, 'the UI must receive the completed state');
+    t.mock.timers.tick(1500);
+    assert.equal(closed, 1, 'the peer must be closed after receipt');
+    assert.equal(item.chunks.length + item.parts.length, 0);
+  });
+}
+
+test('a corrupt receive never sends an ACK or reports completion', async t => {
+  const { connection, transfers } = setup(t);
+  await transfers.receive({ id: 'corrupt', peerId: 'b', metadata: { kind: 'file', name: 'received', size: 1 }, iceServers: [] });
+  const item = transfers.byId.get('corrupt');
+  let acknowledgements = 0;
+  const channel = { readyState: 'open', send() { acknowledgements++; } };
+  transfers.bindChannel(item, channel);
+  channel.onmessage({ data: new Uint8Array([1]).buffer });
+  channel.onmessage({ data: JSON.stringify({ type: 'end', hash: createHash('sha256').update('wrong').digest('hex') }) });
+  await item.receiveQueue;
+  assert.equal(item.status, 'failed');
+  assert.notEqual(item.verified, true);
+  assert.equal(acknowledgements, 0);
+  assert.deepEqual(connection.ends, [{ id: item.id, status: 'failed' }]);
+});
+
 test('large incoming files are accepted for direct transfer but never send data over a relay route', async (t) => {
   const { connection, transfers } = setup(t);
   await transfers.receive({ id: 'unlimited', peerId: 'b', metadata: { kind: 'file', name: '5GiB.bin', size: 5 * 1024 ** 3 }, iceServers: [] });
