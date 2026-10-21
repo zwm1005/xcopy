@@ -97,6 +97,17 @@ func serve(ctx context.Context, p Paths) error {
 				result <- Response{Error: err.Error()}
 				return
 			}
+			if remote, ok := value.(remoteRequest); ok {
+				go func() {
+					var data json.RawMessage
+					if err := remote.wire.call(remote.kind, remote.data, &data); err != nil {
+						result <- Response{Error: err.Error()}
+					} else {
+						result <- Response{Data: data}
+					}
+				}()
+				return
+			}
 			data, err := json.Marshal(value)
 			if err != nil {
 				result <- Response{Error: err.Error()}
@@ -218,13 +229,16 @@ func (e *Engine) handle(q Request) (any, error) {
 			}
 			q.Data = map[string]any{"peerId": p.ID}
 		}
-		var result json.RawMessage
-		if err := e.wire.call(q.Op, q.Data, &result); err != nil {
-			return nil, err
-		}
-		return result, nil
+		return remoteRequest{wire: e.wire, kind: q.Op, data: q.Data}, nil
 	}
 	return nil, fmt.Errorf("不支持的操作 %s", q.Op)
+}
+
+// Prepared on the engine loop, executed by the IPC handler outside that loop.
+type remoteRequest struct {
+	wire *wire
+	kind string
+	data any
 }
 
 type daemonEndpoint struct {

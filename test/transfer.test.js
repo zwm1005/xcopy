@@ -59,6 +59,10 @@ async function settle() {
 }
 
 async function complete(transfers, item) {
+  // Queue-only fixtures simulate a completed write; protocol tests below
+  // exercise sendBytes and reject receipts that arrive before this boundary.
+  item.bytes = item.size;
+  item.sentEnd = true;
   await transfers.message(item, JSON.stringify({ type: 'ack' }));
   await settle();
 }
@@ -194,6 +198,43 @@ test('cancelling one queued item never sends it later', async (t) => {
   assert.equal(connection.starts.length, 5);
   assert.equal(queued.status, 'cancelled');
   assert.equal(queued.id, undefined);
+});
+
+for (const receipt of ['ack', 'state', 'resume']) {
+  test(`an early ${receipt} cannot mark unsent bytes delivered`, async t => {
+    const { connection, transfers } = setup(t);
+    transfers.sendBatch(peers.slice(0, 1), sources.slice(0, 1));
+    await settle();
+    const item = transfers.items[0];
+    if (receipt === 'ack') {
+      await transfers.message(item, '{"type":"ack"}');
+    } else if (receipt === 'state') {
+      connection.emit('transfer.state', { id: item.id, status: 'completed' });
+    } else {
+      connection.emit('ready', { peers, resumed: true, tasks: [{ id: item.id, status: 'completed' }] });
+    }
+    assert.equal(item.status, 'failed');
+    assert.equal(item.bytes, 0);
+    assert.ok(connection.ends.some(end => end.id === item.id && end.status === 'failed'));
+  });
+}
+
+test('a complete byte count still needs an end marker; empty files and duplicate receipts remain valid', async t => {
+  const { transfers } = setup(t);
+  const early = transfers.queuedItem(peers[0], { kind: 'text', text: 'content' });
+  early.status = 'transferring';
+  early.bytes = early.size;
+  await transfers.message(early, '{"type":"ack"}');
+  assert.equal(early.status, 'failed');
+  const empty = transfers.queuedItem(peers[0], { kind: 'file', file: new File([], 'empty') });
+  empty.status = 'transferring';
+  const sent = [];
+  empty.channel = { bufferedAmount: 0, send: data => sent.push(data) };
+  await transfers.sendBytes(empty);
+  assert.equal(JSON.parse(sent[0]).type, 'end');
+  await transfers.message(empty, '{"type":"ack"}');
+  await transfers.message(empty, '{"type":"ack"}');
+  assert.equal(empty.status, 'completed');
 });
 
 test('files are read and checked in bounded blocks with the original SHA-256 wire format', async (t) => {

@@ -1,5 +1,5 @@
 import { initI18n, onLocaleChange } from './i18n/index.js';
-await initI18n();
+initI18n();
 import { t } from './i18n/index.js';
 import { query, activeElement } from './dom.js';
 const demo = query<HTMLElement>(document, '[data-demo]');

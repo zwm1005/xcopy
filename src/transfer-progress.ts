@@ -1,6 +1,7 @@
 import type { TransferItem } from './types/transfer.js';
 import { t } from './i18n/index.js';
 import { sizeLabel } from './i18n/format.js';
+import { text } from './dom.js';
 
 export const activeTransfer = (item: TransferItem) => !['completed', 'failed', 'cancelled'].includes(item.status);
 export function transferredBytes(item: TransferItem): number {
@@ -68,15 +69,30 @@ export function progressMetrics(items: TransferItem[], total = items.reduce((sum
   const box = document.createElement('div');
   box.className = 'qt-transfer-metrics';
   const amount = document.createElement('span');
-  amount.textContent = t(incoming ? 'progress.received.bytes' : 'progress.sent.bytes', { done: sizeLabel(Math.min(bytes, total)), total: sizeLabel(total) });
   box.append(amount);
-  const label = speedLabel(items);
-  if (label) {
-    const speed = document.createElement('span');
-    speed.className = 'qt-transfer-speed';
-    speed.dataset.transferSpeed = '';
-    speed.textContent = label;
-    box.append(speed);
-  }
+  updateProgressMetrics(box, items, total, bytes, incoming);
   return box;
+}
+
+export function updateProgressMetrics(box: HTMLElement, items: TransferItem[], total = items.reduce((sum, item) => sum + item.size, 0), bytes = items.reduce((sum, item) => sum + transferredBytes(item), 0), incoming = items[0]?.incoming || false) {
+  text(box.firstChild!, t(incoming ? 'progress.received.bytes' : 'progress.sent.bytes', { done: sizeLabel(Math.min(bytes, total)), total: sizeLabel(total) }));
+  const label = speedLabel(items);
+  let speed = box.querySelector<HTMLElement>('[data-transfer-speed]');
+  if (label) {
+    if (!speed) {
+      speed = document.createElement('span');
+      speed.className = 'qt-transfer-speed';
+      speed.dataset.transferSpeed = '';
+      box.append(speed);
+    }
+    text(speed, label);
+  } else {
+    speed?.remove();
+  }
+}
+
+export function updateMeter(meter: HTMLProgressElement, value: number) {
+  if (meter.value !== value) {
+    meter.value = value;
+  }
 }

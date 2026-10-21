@@ -1,11 +1,11 @@
-import { progressMetrics, transferredBytes } from './transfer-progress.js';
+import { progressMetrics, transferredBytes, updateProgressMetrics, updateMeter } from './transfer-progress.js';
 import { preserveRecordLocation } from './notices.js';
 import type { ClientLimits } from './types/device.js';
 import { messageText } from './i18n/errors.js';
-import { t } from './i18n/index.js';
+import { t, currentLocale } from './i18n/index.js';
 import type { Claim, ShareSnapshot, ShareEntry, ShareComposerOptions, ShareMode } from './types/share.js';
 import type { TransferItem } from './types/transfer.js';
-import { query, activeElement } from './dom.js';
+import { query, activeElement, ViewCache, reconcileChildren, text } from './dom.js';
 import { errorValue } from './dom.js';
 const terminal = new Set(['completed', 'cancelled', 'expired', 'unavailable', 'stopped']);
 import { sizeLabel } from './i18n/format.js';
@@ -113,6 +113,12 @@ export function progressNode(items: TransferItem[], totalBytes: number, complete
     box.append(progressMetrics(items, totalBytes, bytes));
     return box;
 }
+export function updateProgressNode(box: HTMLElement, items: TransferItem[], totalBytes: number, completed: number, count: number) {
+    const bytes = items.reduce((sum, item) => sum + transferredBytes(item), 0);
+    updateMeter(query<HTMLProgressElement>(box, 'progress'), totalBytes ? Math.min(bytes, totalBytes) : completed === count ? 1 : 0);
+    text(query(box, 'p'), t("share-ui.verified.files", { p0: completed, p1: count, p2: sizeLabel(Math.min(bytes, totalBytes)), p3: sizeLabel(totalBytes) }));
+    updateProgressMetrics(query(box, '.qt-transfer-metrics'), items, totalBytes, bytes);
+}
 export function saveBlob(blob: Blob, name: string) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -145,6 +151,7 @@ export class ShareComposer {
     loadingHistory = false;
     panel: HTMLElement;
     records: HTMLElement;
+    private recordViews = new ViewCache();
     clock: ReturnType<typeof setInterval>;
     viewFeedbackTimer: ReturnType<typeof setTimeout> | undefined;
     pendingCreate: {
@@ -204,7 +211,7 @@ export class ShareComposer {
             this.render();
         });
         connection.addEventListener('disconnected', () => this.render());
-        transfers.addEventListener('change', () => this.render());
+        transfers.addEventListener('change', () => this.renderProgress());
         this.clock = setInterval(() => {
             for (const node of this.panel.querySelectorAll<HTMLElement>('[data-share-expiry]')) {
                 node.textContent = this.remaining(Number(node.dataset.shareExpiry));
@@ -430,6 +437,9 @@ export class ShareComposer {
         }
     }
     render() {
+        if (this.mode !== 'share') {
+            return;
+        }
         const selected = this.current();
         const focus = activeElement();
         const filesOpen = this.panel.querySelector<HTMLDetailsElement>('.share-file-details')?.open || false;
@@ -627,7 +637,9 @@ export class ShareComposer {
             else if (selected.status === 'claimed') {
                 const items = this.transfers.items.filter((i) => i.shareId === selected.id);
                 this.panel.append(progressNode(items, selected.totalBytes, selected.files.filter((f) => f.completed).length, selected.files.length));
-                this.panel.append(el('p', 'share-description', messageText(items.find((i) => i.status === 'failed')?.reason) || (items.some((i) => i.status === 'failed') ? t("share-ui.connection.lost.waiting.for.the.original.recipient.tab") : t("share-ui.the.recipient.is.receiving.keep.this.page.open"))));
+                const message = el('p', 'share-description');
+                message.dataset.shareTransferMessage = '';
+                this.panel.append(message);
             }
             const footer = el('div', 'share-footer');
             const cancel = action(selected.mode === 'multiple' ? t("share-ui.end.share") : t("share-ui.cancel.share"), async () => {
@@ -654,77 +666,83 @@ export class ShareComposer {
             this.panel.append(footer);
         }
         const restoreLocation = preserveRecordLocation(this.records);
-        this.records.replaceChildren();
+        const rows: HTMLElement[] = [];
         for (const s of this.entries) {
-            const row = el('article', 'qt-transfer-card share-record');
-            row.dataset.shareRecord = s.id;
-            row.dataset.status = s.status;
-            const main = el('div', 'share-record-main');
-            const info = el('div', 'share-record-info');
-            const controls = el('div', 'share-record-actions');
-            info.append(el('h3', '', t("share-ui.files.alt", { p0: s.mode === 'multiple' ? t("share-ui.multiple.recipients.alt") : t("share-ui.one.recipient"), p1: s.files.length })));
-            if (s.recipientName) {
-                const recipient = el('p', 'share-recipient', t("share-ui.receiving.device", { p0: s.recipientName }));
-                recipient.dataset.recipientName = '';
-                info.append(recipient);
-            }
-            info.append(el('p', 'share-muted share-small', `${sizeLabel(s.totalBytes)} · ${statusLabel(s)}`));
-            if (s.mode === 'multiple') {
-                info.append(el('p', 'share-muted share-small share-counts', this.claimSummary(s)));
-            }
-            main.append(info, controls);
-            row.append(main);
-            if (terminal.has(s.status) || s.mode === 'multiple') {
-                const expanded = this.expandedRecords.has(s.id);
-                const details = el('div', 'share-record-details');
-                details.id = `share-result-${s.id}`;
-                details.hidden = !expanded;
-                const sharedFiles = detailSection(t("share-ui.shared.files"), `share-files-${s.id}`, t("share-ui.files", { p0: s.files.length, p1: sizeLabel(s.totalBytes) }));
-                sharedFiles.classList.add('share-detail-files');
-                const files = fileList(s.files, s.mode === 'multiple' ? null : (file) => el('span', 'share-small share-muted', file.completed ? t("share-ui.verified") : t("share-ui.unfinished.alt")));
-                for (const file of files.children) {
-                    file.prepend(detailIcon('file'));
+            const { sources, ...snapshot } = s;
+            const row = this.recordViews.get(s.id, [currentLocale(), JSON.stringify(snapshot), this.expandedRecords.has(s.id)], () => {
+                const row = el('article', 'qt-transfer-card share-record');
+                row.dataset.shareRecord = s.id;
+                row.dataset.status = s.status;
+                const main = el('div', 'share-record-main');
+                const info = el('div', 'share-record-info');
+                const controls = el('div', 'share-record-actions');
+                info.append(el('h3', '', t("share-ui.files.alt", { p0: s.mode === 'multiple' ? t("share-ui.multiple.recipients.alt") : t("share-ui.one.recipient"), p1: s.files.length })));
+                if (s.recipientName) {
+                    const recipient = el('p', 'share-recipient', t("share-ui.receiving.device", { p0: s.recipientName }));
+                    recipient.dataset.recipientName = '';
+                    info.append(recipient);
                 }
-                sharedFiles.append(files);
-                const recipients = detailSection(t("share-ui.receiving.devices"), `share-devices-${s.id}`, this.claimSummary(s));
-                recipients.classList.add('share-detail-devices');
-                recipients.append(this.claimDetails(s));
-                details.append(sharedFiles, recipients);
-                if (s.mode !== 'multiple') {
-                    details.append(el('p', 'share-muted share-small', s.status === 'completed' ? t("share-ui.all.files.received.and.verified.the.recipient.can") : t("share-ui.this.share.has.ended.sharing.again.will.create")));
+                info.append(el('p', 'share-muted share-small', `${sizeLabel(s.totalBytes)} · ${statusLabel(s)}`));
+                if (s.mode === 'multiple') {
+                    info.append(el('p', 'share-muted share-small share-counts', this.claimSummary(s)));
                 }
-                const toggle = action(expanded ? t("app.hide.details") : t("share-ui.view.details"), () => {
-                    if (this.expandedRecords.has(s.id)) {
-                        this.expandedRecords.delete(s.id);
+                main.append(info, controls);
+                row.append(main);
+                if (terminal.has(s.status) || s.mode === 'multiple') {
+                    const expanded = this.expandedRecords.has(s.id);
+                    const details = el('div', 'share-record-details');
+                    details.id = `share-result-${s.id}`;
+                    details.hidden = !expanded;
+                    if (expanded) {
+                        const sharedFiles = detailSection(t("share-ui.shared.files"), `share-files-${s.id}`, t("share-ui.files", { p0: s.files.length, p1: sizeLabel(s.totalBytes) }));
+                        sharedFiles.classList.add('share-detail-files');
+                        const files = fileList(s.files, s.mode === 'multiple' ? null : (file) => el('span', 'share-small share-muted', file.completed ? t("share-ui.verified") : t("share-ui.unfinished.alt")));
+                        for (const file of files.children) {
+                            file.prepend(detailIcon('file'));
+                        }
+                        sharedFiles.append(files);
+                        const recipients = detailSection(t("share-ui.receiving.devices"), `share-devices-${s.id}`, this.claimSummary(s));
+                        recipients.classList.add('share-detail-devices');
+                        recipients.append(this.claimDetails(s));
+                        details.append(sharedFiles, recipients);
+                        if (s.mode !== 'multiple') {
+                            details.append(el('p', 'share-muted share-small', s.status === 'completed' ? t("share-ui.all.files.received.and.verified.the.recipient.can") : t("share-ui.this.share.has.ended.sharing.again.will.create")));
+                        }
                     }
-                    else {
-                        this.expandedRecords.add(s.id);
-                    }
-                    this.render();
-                });
-                toggle.dataset.shareControl = `record-details-${s.id}`;
-                toggle.setAttribute('aria-expanded', String(expanded));
-                toggle.setAttribute('aria-controls', details.id);
-                controls.append(toggle);
-                row.append(details);
-            }
-            if (!terminal.has(s.status)) {
-                const view = action(t("share-ui.view.share"), () => {
-                    this.selected = s.id;
-                    this.setMode('share');
-                    this.panel.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
-                    this.panel.querySelector<HTMLElement>('[data-share-control]')?.focus({ preventScroll: true });
-                    // 当前分享可能已完整显示，滚动和鼠标焦点都不足以反馈这次点击。
-                    clearTimeout(this.viewFeedbackTimer);
-                    this.panel.classList.add('share-panel-highlighted');
-                    this.viewFeedbackTimer = setTimeout(() => this.panel.classList.remove('share-panel-highlighted'), 2000);
-                    this.tell(t("share-ui.share.shown.above"));
-                });
-                view.dataset.shareControl = `record-view-${s.id}`;
-                view.setAttribute('aria-controls', this.panel.id);
-                controls.append(view);
-            }
-            this.records.append(row);
+                    const toggle = action(expanded ? t("app.hide.details") : t("share-ui.view.details"), () => {
+                        if (this.expandedRecords.has(s.id)) {
+                            this.expandedRecords.delete(s.id);
+                        }
+                        else {
+                            this.expandedRecords.add(s.id);
+                        }
+                        this.render();
+                    });
+                    toggle.dataset.shareControl = `record-details-${s.id}`;
+                    toggle.setAttribute('aria-expanded', String(expanded));
+                    toggle.setAttribute('aria-controls', details.id);
+                    controls.append(toggle);
+                    row.append(details);
+                }
+                if (!terminal.has(s.status)) {
+                    const view = action(t("share-ui.view.share"), () => {
+                        this.selected = s.id;
+                        this.setMode('share');
+                        this.panel.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+                        this.panel.querySelector<HTMLElement>('[data-share-control]')?.focus({ preventScroll: true });
+                        // 当前分享可能已完整显示，滚动和鼠标焦点都不足以反馈这次点击。
+                        clearTimeout(this.viewFeedbackTimer);
+                        this.panel.classList.add('share-panel-highlighted');
+                        this.viewFeedbackTimer = setTimeout(() => this.panel.classList.remove('share-panel-highlighted'), 2000);
+                        this.tell(t("share-ui.share.shown.above"));
+                    });
+                    view.dataset.shareControl = `record-view-${s.id}`;
+                    view.setAttribute('aria-controls', this.panel.id);
+                    controls.append(view);
+                }
+                return row;
+            });
+            rows.push(row);
         }
         if (this.historyCursor) {
             const more = action(t("share-ui.load.more"), async () => {
@@ -748,11 +766,51 @@ export class ShareComposer {
             });
             more.dataset.shareControl = 'load-history';
             more.disabled = this.loadingHistory || !this.connection.ready;
-            this.records.append(more);
+            rows.push(more);
         }
+        reconcileChildren(this.records, rows);
+        this.recordViews.prune(new Set(this.entries.map(entry => entry.id)));
+        this.renderProgress();
         restoreLocation();
         if (focusKey) {
             [...this.root.querySelectorAll<HTMLElement>('[data-share-control]')].find((n) => n.dataset.shareControl === focusKey)?.focus({ preventScroll: true });
+        }
+    }
+    private renderProgress() {
+        if (this.mode !== 'share') {
+            return;
+        }
+        const selected = this.current();
+        const progress = this.panel.querySelector<HTMLElement>('.share-progress');
+        if (selected && progress) {
+            const items = this.transfers.items.filter(item => item.shareId === selected.id);
+            updateProgressNode(progress, items, selected.totalBytes, selected.files.filter(file => file.completed).length, selected.files.length);
+            const message = this.panel.querySelector<HTMLElement>('[data-share-transfer-message]');
+            if (message) {
+                text(message, messageText(items.find(item => item.status === 'failed')?.reason) || (items.some(item => item.status === 'failed') ? t("share-ui.connection.lost.waiting.for.the.original.recipient.tab") : t("share-ui.the.recipient.is.receiving.keep.this.page.open")));
+            }
+        }
+        for (const record of this.records.querySelectorAll<HTMLElement>('[data-share-record]')) {
+            const entry = this.entries.find(entry => entry.id === record.dataset.shareRecord);
+            if (!entry) {
+                continue;
+            }
+            for (const row of record.querySelectorAll<HTMLElement>('[data-claim-record]')) {
+                const claim = entry.claims?.find(claim => claim.id === row.dataset.claimRecord);
+                const meter = row.querySelector<HTMLProgressElement>('progress');
+                if (!claim || !meter) {
+                    continue;
+                }
+                const items = this.transfers.items.filter(item => item.shareId === entry.id && item.claimId === claim.id);
+                const done = new Set(claim.files.filter(file => file.completed).map(file => file.index));
+                const bytes = claim.state === 'completed' ? entry.totalBytes : entry.files.filter(file => done.has(file.index)).reduce((sum, file) => sum + file.size, 0)
+                    + items.filter(item => !done.has(item.shareIndex)).reduce((sum, item) => sum + transferredBytes(item), 0);
+                updateMeter(meter, claim.state === 'completed' ? meter.max : Math.min(entry.totalBytes, bytes));
+                updateProgressMetrics(query(row, '.qt-transfer-metrics'), items, entry.totalBytes, bytes);
+                if (claim.state === 'transferring') {
+                    text(query(row, '.share-claim-status'), `${Math.min(99, Math.floor(bytes / Math.max(entry.totalBytes, 1) * 100))}%`);
+                }
+            }
         }
     }
 }
