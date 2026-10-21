@@ -6,10 +6,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -53,7 +53,7 @@ type task struct {
 	activity             atomic.Int64
 	cancel               context.CancelFunc
 	ctx                  context.Context
-	receiver             *receiver
+	receive              *receiveQueue
 }
 
 func terminal(status string) bool {
@@ -75,6 +75,9 @@ type Engine struct {
 	partialPrefix string
 	pendingStarts int
 	pendingEvents []message
+	receivers     atomic.Int32
+	diskWorkers   sync.WaitGroup
+	history       *historyWriter
 }
 
 func newEngine(ctx context.Context, c Config, p Paths) (*Engine, error) {
@@ -133,6 +136,12 @@ func (e *Engine) post(fn func()) bool {
 
 func (e *Engine) run() {
 	defer e.root.Close()
+	defer func() {
+		e.diskWorkers.Wait()
+		if e.history != nil {
+			e.history.close()
+		}
+	}()
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -352,9 +361,11 @@ func (e *Engine) persist() {
 			break
 		}
 	}
-	if err := atomicJSON(filepath.Join(e.paths.Data, "history.json"), e.records(false)); err != nil {
-		log.Printf("保存记录失败: %v", err)
+	if e.history == nil {
+		path := filepath.Join(e.paths.Data, "history.json")
+		e.history = newHistoryWriter(func(records []Record) error { return atomicJSON(path, records) })
 	}
+	e.history.submit(e.records(false))
 }
 
 func (e *Engine) peer(value string) (Peer, error) {
@@ -531,10 +542,7 @@ func (e *Engine) finish(t *task, status, reason string, notify bool) {
 	if t.cancel != nil {
 		t.cancel()
 	}
-	if t.receiver != nil {
-		t.receiver.abort()
-		t.receiver = nil
-	}
+	t.receive = nil
 	if t.pc != nil {
 		pc := t.pc
 		t.pc = nil

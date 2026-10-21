@@ -9,7 +9,6 @@ import (
 	"hash"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -18,9 +17,13 @@ import (
 )
 
 type receiver struct {
-	root      *os.Root
-	file      *os.File
+	root *os.Root
+	file interface {
+		io.WriteCloser
+		Sync() error
+	}
 	temp      string
+	saved     string
 	hash      hash.Hash
 	size      int64
 	written   int64
@@ -85,8 +88,8 @@ func (r *receiver) commit(name, expected string, text bool) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		r.saved = candidate
 		if err := r.root.Remove(r.temp); err != nil {
-			_ = r.root.Remove(candidate)
 			return "", err
 		}
 		dir, err := r.root.Open(".")
@@ -110,6 +113,9 @@ func (r *receiver) abort() {
 	}
 	if !r.committed {
 		_ = r.root.Remove(r.temp)
+		if r.saved != "" {
+			_ = r.root.Remove(r.saved)
+		}
 	}
 }
 
@@ -161,7 +167,14 @@ func (e *Engine) makePC(t *task, servers []webrtc.ICEServer, relay bool) error {
 			}
 		})
 	})
+	receive := t.receive
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
+		if state == webrtc.PeerConnectionStateFailed && receive != nil {
+			// An end marker already queued for durable commit takes precedence
+			// over a subsequent transport failure.
+			receive.push(receiveEvent{err: fmt.Errorf("WebRTC 连接失败")})
+			return
+		}
 		e.post(func() {
 			if terminal(t.Status) {
 				return
@@ -290,19 +303,24 @@ func (e *Engine) offer(data json.RawMessage) {
 		e.finish(t, "failed", "不支持的内容类型或大小", true)
 		return
 	}
-	var err error
-	t.receiver, err = newReceiver(e.root, m.Size, e.partialPrefix)
-	if err == nil {
-		err = e.makePC(t, offer.ICEServers, offer.ForceRelay)
-	}
-	if err == nil {
-		w, id := e.wire, t.WireID
+	w, id := e.wire, t.WireID
+	err := e.startReceiver(t, func() (*receiver, error) {
+		return newReceiver(e.root, m.Size, e.partialPrefix)
+	}, func() {
+		if e.wire != w {
+			e.finish(t, "failed", "连接中断，请重新发送", false)
+			return
+		}
+		if err := e.makePC(t, offer.ICEServers, offer.ForceRelay); err != nil {
+			e.finish(t, "failed", err.Error(), true)
+			return
+		}
 		go func() {
 			if err := w.call("transfer.accept", map[string]any{"id": id}, nil); err != nil {
 				e.post(func() { e.finish(t, "failed", err.Error(), true) })
 			}
 		}()
-	}
+	})
 	if err != nil {
 		e.finish(t, "failed", err.Error(), true)
 	}
@@ -371,15 +389,25 @@ func (e *Engine) bindChannel(t *task, dc *webrtc.DataChannel) {
 			}
 		})
 	})
-	dc.OnError(func(err error) { e.post(func() { e.finish(t, "failed", err.Error(), true) }) })
+	// Receive callbacks only feed this transfer's bounded queue. Disk I/O and
+	// backpressure must never occupy the shared engine/control-command loop.
+	receive := t.receive
+	channelError := func(err error) {
+		if receive != nil {
+			receive.push(receiveEvent{err: err})
+		} else {
+			e.post(func() { e.finish(t, "failed", err.Error(), true) })
+		}
+	}
+	dc.OnError(channelError)
 	dc.OnClose(func() {
-		e.post(func() {
-			if !terminal(t.Status) {
-				e.finish(t, "failed", "数据通道已关闭", true)
-			}
-		})
+		channelError(fmt.Errorf("数据通道已关闭"))
 	})
 	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
+		if receive != nil {
+			receive.message(msg, func() { _ = dc.SendText(`{"type":"ack"}`) })
+			return
+		}
 		data := append([]byte(nil), msg.Data...)
 		e.post(func() {
 			if terminal(t.Status) {
@@ -404,39 +432,12 @@ func (e *Engine) bindChannel(t *task, dc *webrtc.DataChannel) {
 						e.finish(t, "completed", "", false)
 					}
 				case "end":
-					if !t.Incoming || t.receiver == nil {
-						e.finish(t, "failed", "无效的结束消息", true)
-						return
-					}
-					name := t.Metadata.Name
-					if t.Metadata.Kind == "text" {
-						name = "text-" + t.Created.Format("20060102-150405") + "-" + t.ID[:8] + ".txt"
-					}
-					var saved string
-					saved, err = t.receiver.commit(name, control.Hash, t.Metadata.Kind == "text")
-					if err == nil {
-						t.Path = filepath.Join(e.config.ReceiveDir, saved)
-						t.Hash = control.Hash
-						// The bytes are durable before acknowledging delivery to the sender.
-						err = dc.SendText(`{"type":"ack"}`)
-						// Successful local receipt remains completed even if the ACK cannot leave.
-						e.finish(t, "completed", "", true)
-						return
-					}
+					err = fmt.Errorf("无效的结束消息")
 				default:
 					err = fmt.Errorf("未知的数据通道消息")
 				}
 			} else {
-				if !t.Incoming || t.receiver == nil {
-					err = fmt.Errorf("发送方收到了意外的二进制数据")
-				} else if len(data) > 16*1024 {
-					err = fmt.Errorf("数据块过大")
-				} else {
-					err = t.receiver.write(data)
-					if err == nil {
-						t.bytes.Add(int64(len(data)))
-					}
-				}
+				err = fmt.Errorf("发送方收到了意外的二进制数据")
 			}
 			if err != nil {
 				e.finish(t, "failed", err.Error(), true)
