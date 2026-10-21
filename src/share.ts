@@ -1,15 +1,15 @@
 import { messageText } from './i18n/errors.js';
-import { initI18n, onLocaleChange } from './i18n/index.js';
-await initI18n();
+import { initI18n, onLocaleChange, currentLocale } from './i18n/index.js';
+initI18n();
 import { t } from './i18n/index.js';
 import type { ShareSnapshot } from './types/share.js';
 import type { TransferItem } from './types/transfer.js';
-import { query, activeElement } from './dom.js';
+import { query, activeElement, text } from './dom.js';
 import { errorValue } from './dom.js';
 import { Connection } from './connection.js';
 import { Transfers } from './transfer.js';
 import { Notices, locateRecord, preserveRecordLocation } from './notices.js';
-import { el, action, fileList, sizeLabel, progressNode, saveBlob } from './share-ui.js';
+import { el, action, fileList, sizeLabel, progressNode, updateProgressNode, saveBlob } from './share-ui.js';
 import { archive } from './archive.js';
 import { deviceNames } from './device-name.js';
 const connection = new Connection({ guest: true });
@@ -26,6 +26,7 @@ let nameError = '';
 const notices = new Notices(query<HTMLElement>(document, '.qt-toast'));
 const completedNotices = new Set<string>();
 const saved = new Set<number>();
+let renderedInputs: unknown[] = [];
 function tell(message: string) {
     notices.message(message);
 }
@@ -137,6 +138,21 @@ function nameControl() {
     return row;
 }
 function render() {
+    const items = latest();
+    const inputs = [currentLocale(), share, error, busy, archiveBusy, editingName, nameDraft, nameError, connection.ready, connection.suspended,
+        ...saved, ...[...items.values()].flatMap(item => [item.localId, item.status, item.verified, item.reason])];
+    if (inputs.length === renderedInputs.length && inputs.every((value, index) => Object.is(value, renderedInputs[index]))) {
+        const progress = root.querySelector<HTMLElement>('.share-progress');
+        if (share && progress) {
+            updateProgressNode(progress, [...items.values()], share.totalBytes, share.files.filter(file => file.completed).length, share.files.length);
+        }
+        for (const node of root.querySelectorAll<HTMLElement>('[data-file-progress]')) {
+            const item = items.get(Number(node.dataset.fileProgress));
+            text(node, item?.status === 'transferring' ? `${Math.floor(item.bytes / Math.max(item.size, 1) * 100)}%` : item?.status === 'failed' ? t("share-ui.awaiting.retry.alt") : '');
+        }
+        return;
+    }
+    renderedInputs = inputs;
     const restoreLocation = preserveRecordLocation(root);
     const focused = root.contains(activeElement()) ? activeElement()?.dataset.control : null;
     const focusedInput = activeElement();
@@ -151,7 +167,6 @@ function render() {
         return;
     }
     const current = share;
-    const items = latest();
     const mine = current.myClaim;
     const multiple = current.mode === 'multiple';
     const complete = current.mine && (mine?.state === 'completed' || current.status === 'completed') && current.files.every((f) => items.get(f.index)?.verified);
@@ -197,7 +212,9 @@ function render() {
             button.dataset.saveIndex = String(file.index);
             return button;
         }
-        return el('span', 'share-muted share-small', item?.status === 'transferring' ? `${Math.floor(item.bytes / Math.max(item.size, 1) * 100)}%` : item?.status === 'failed' ? t("share-ui.awaiting.retry.alt") : '');
+        const progress = el('span', 'share-muted share-small', item?.status === 'transferring' ? `${Math.floor(item.bytes / Math.max(item.size, 1) * 100)}%` : item?.status === 'failed' ? t("share-ui.awaiting.retry.alt") : '');
+        progress.dataset.fileProgress = String(file.index);
+        return progress;
     });
     if (!current.mine && current.files.length > 3) {
         const details = el('details', 'share-file-details');

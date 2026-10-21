@@ -18,6 +18,6 @@ export interface TransferItem extends Metadata {
   iceServers?: RTCIceServer[]; forceRelay?: boolean; directOnly?: boolean; maxRelayFileBytes?: number;
   pc?: RTCPeerConnection; channel?: RTCDataChannel; hash?: IncrementalHash; chunkBytes: number;
   opening?: Promise<void>; receiveQueue?: Promise<void>; signalQueue?: Promise<void>;
-  receivingEnd?: boolean; verified?: boolean; url?: string; downloadStarted?: boolean; imageCopied?: boolean; copying?: boolean;
+  sentEnd?: boolean; receivingEnd?: boolean; verified?: boolean; url?: string; downloadStarted?: boolean; imageCopied?: boolean; copying?: boolean;
 }
 export type Signal = { description: RTCSessionDescriptionInit; candidate?: never } | { candidate: RTCIceCandidateInit; description?: never };

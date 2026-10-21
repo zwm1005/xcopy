@@ -7,10 +7,14 @@ const randomId = () => randomBytes(32).toString('base64url');
 const closed = new Set(['completed', 'cancelled', 'expired', 'unavailable', 'stopped']);
 const claimEnded = new Set(['completed', 'cancelled', 'expired', 'unavailable']);
 const taskEnded = new Set(['completed', 'failed', 'cancelled']);
+const MAX_ACTIVE_SHARES = 2000;
+const MAX_SHARE_HISTORY = 2000;
+const SHARE_HISTORY_TTL = 3600000;
 
 // 分享和领取会话分别授权；文件内容仅保留在发送、接收页面。
 export function createShares({ config, now, requireThat, rate, rateStart, rateList, send, transfers, registerTransfer, finish, cleanName, deviceName }) {
   const shares = new Map();
+  const endedShares = new Map();
   const tokens = new Map();
   const guests = new Map();
   const senders = new Map();
@@ -168,13 +172,33 @@ export function createShares({ config, now, requireThat, rate, rateStart, rateLi
     prune(s);
   }
 
+  function removeShare(s) {
+    shares.delete(s.id);
+    endedShares.delete(s.id);
+    tokens.delete(s.token);
+    const index = senders.get(s.sender);
+    index?.items.delete(s.id);
+    if (s.requestId) {
+      index?.requests.delete(s.requestId);
+    }
+  }
+
+  function markEnded(s, status) {
+    s.status = status;
+    s.endedAt = now();
+    // History is bounded independently of active capacity and ordered by ending time.
+    endedShares.set(s.id, s);
+    while (endedShares.size > MAX_SHARE_HISTORY) {
+      removeShare(endedShares.values().next().value);
+    }
+  }
+
   function end(s, status) {
     if (closed.has(s.status)) {
       return;
     }
     s.accepting = false;
-    s.status = status;
-    s.endedAt = now();
+    markEnded(s, status);
     for (const c of live(s)) {
       closeClaim(s, c, status === 'unavailable' ? 'unavailable' : status === 'expired' ? 'expired' : 'cancelled', status === 'cancelled' ? '发送方已结束分享' : '分享已失效');
     }
@@ -199,8 +223,7 @@ export function createShares({ config, now, requireThat, rate, rateStart, rateLi
       }
     }
     if (!s.accepting && !live(s).length) {
-      s.status = s.closeReason || (s.mode === 'single' ? 'completed' : 'stopped');
-      s.endedAt = now();
+      markEnded(s, s.closeReason || (s.mode === 'single' ? 'completed' : 'stopped'));
       changed = true;
     }
     return changed;
@@ -351,7 +374,8 @@ export function createShares({ config, now, requireThat, rate, rateStart, rateLi
       const mode = data.mode ?? 'single';
       requireThat(['single', 'multiple'].includes(mode), 'INVALID', '请选择领取方式');
       requireThat(mode !== 'multiple' || data.shareProtocol === 2, 'UPDATE_REQUIRED', '请刷新发送页面后创建多人分享');
-      requireThat(shares.size < 2000 && ![...index.items.values()].some((s) => !closed.has(s.status)), 'BUSY', '请先结束当前分享，再创建新的分享');
+      requireThat(shares.size - endedShares.size < MAX_ACTIVE_SHARES, 'BUSY', '当前访问较多，请稍后重试');
+      requireThat(![...index.items.values()].some((s) => !closed.has(s.status)), 'BUSY', '请先结束当前分享，再创建新的分享');
       requireThat([10, 30, 60].includes(data.minutes), 'INVALID', '请选择有效期');
       requireThat(Array.isArray(data.files) && data.files.length > 0 && data.files.length <= limits.maxShareFiles, 'SIZE_LIMIT', `一次分享支持 1–${MAX_FILES_PER_SEND} 个文件`);
       let totalBytes = 0;
@@ -529,21 +553,15 @@ export function createShares({ config, now, requireThat, rate, rateStart, rateLi
       }
     },
     sweep() {
-      for (const [id, s] of shares) {
+      for (const s of shares.values()) {
         check(s);
         for (const c of s.claims.values()) {
           if (claimEnded.has(c.state) && c.receiver && !online(c.receiver) && now() - c.receiver.closedAt >= config.reconnectGrace) {
             c.receiver = null;
           }
         }
-        if (closed.has(s.status) && now() - s.endedAt > 3600000) {
-          shares.delete(id);
-          tokens.delete(s.token);
-          const index = senders.get(s.sender);
-          index?.items.delete(s.id);
-          if (s.requestId) {
-            index?.requests.delete(s.requestId);
-          }
+        if (closed.has(s.status) && now() - s.endedAt > SHARE_HISTORY_TTL) {
+          removeShare(s);
         }
       }
       for (const [id, ws] of guests) {

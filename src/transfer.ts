@@ -465,6 +465,7 @@ export class Transfers extends EventTarget {
             }
             if (!ended.has(item.status)) {
                 item.channel.send(JSON.stringify({ type: 'end', hash: hex(hash.digest()) }));
+                item.sentEnd = true;
             }
         }
         finally {
@@ -568,6 +569,12 @@ export class Transfers extends EventTarget {
     }
     finishLocal(item: TransferItem, status: TransferStatus, reason = '') {
         if (ended.has(item.status)) {
+            return;
+        }
+        // ACK, signaling state and reconnect snapshots share the same completion
+        // gate. Even an empty file must publish its digest before it can be sent.
+        if (status === 'completed' && (item.incoming ? !item.verified : !item.sentEnd || item.bytes !== item.size)) {
+            this.fail(item, t("transfer.invalid.transfer.acknowledgement"));
             return;
         }
         item.status = status;

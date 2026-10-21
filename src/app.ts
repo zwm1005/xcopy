@@ -1,15 +1,15 @@
 import { messageText } from './i18n/errors.js';
-import { initI18n, onLocaleChange } from './i18n/index.js';
-await initI18n();
+import { initI18n, onLocaleChange, currentLocale } from './i18n/index.js';
+initI18n();
 import { t } from './i18n/index.js';
 import type { Attachment, Peer, PairRequest, Reception } from './types/device.js';
 import type { TransferItem, TransferGroup, Source } from './types/transfer.js';
-import { query, activeElement } from './dom.js';
+import { query, activeElement, ViewCache, reconcileChildren, text } from './dom.js';
 import { enhanceSelect } from './select.js';
 import { errorValue } from './dom.js';
 import { Connection } from './connection.js';
 import { Transfers } from './transfer.js';
-import { progressMetrics, transferredBytes } from './transfer-progress.js';
+import { progressMetrics, transferredBytes, updateProgressMetrics, updateMeter } from './transfer-progress.js';
 import { Notices, locateRecord, preserveRecordLocation } from './notices.js';
 import { DeviceFeedback } from './device-feedback.js';
 import { FirstUseGuide } from './guide.js';
@@ -51,6 +51,8 @@ let leaveGuardInstalled = false;
 let lastReception: Reception | undefined;
 let shareUI: ShareComposer | undefined;
 let guide: FirstUseGuide | undefined;
+const transferViews = new ViewCache();
+const groupViews = new ViewCache();
 const feedback = new DeviceFeedback({
     root, notices, items: () => transfers.items,
     visible: () => shareUI?.mode !== 'share' && !state.modal && !imagePreview.open && !guide?.active,
@@ -210,7 +212,6 @@ function renderTransfers() {
     const focusAction = focused?.dataset.action;
     const focusId = focused?.dataset.id;
     const focusPeer = focused?.dataset.peerId;
-    list.replaceChildren();
     const activeGroups = new Set(transfers.items.filter((item) => item.groupId && isActive(item)).map((item) => item.groupId));
     const activeBatches = new Set(transfers.items.filter(item => item.batchId && isActive(item)).map(item => item.batchId));
     const sharing = shareUI?.mode === 'share';
@@ -234,23 +235,36 @@ function renderTransfers() {
     get<HTMLElement>('.qt-history-footer > span').hidden = sharing;
     get<HTMLElement>('.qt-history-footer').hidden = sharing && get<HTMLButtonElement>('[data-action="clear"]').hidden;
     const shown = new Set<string>();
+    const rows: HTMLElement[] = [];
+    const grouped = new Map<string, TransferItem[]>();
+    const groups = new Map(transfers.groups.map(group => [group.id, group]));
+    for (const item of transfers.items) {
+        if (item.groupId) {
+            const items = grouped.get(item.groupId) || [];
+            items.push(item);
+            grouped.set(item.groupId, items);
+        }
+    }
     for (const item of transfers.items) {
         if (item.shareId) {
             continue;
         }
         if (item.groupId) {
             if (!shown.has(item.groupId)) {
-                const group = transfers.groups.find((entry) => entry.id === item.groupId);
+                const group = groups.get(item.groupId);
                 if (group) {
-                    list.append(renderGroup(group));
+                    rows.push(renderGroup(group, grouped.get(group.id)!));
                 }
                 shown.add(item.groupId);
             }
         }
         else {
-            list.append(renderTransfer(item));
+            rows.push(renderTransfer(item));
         }
     }
+    reconcileChildren(list, rows);
+    transferViews.prune(new Set(transfers.items.map(item => item.localId)));
+    groupViews.prune(new Set(groups.keys()));
     if (focusAction) {
         [...list.querySelectorAll<HTMLButtonElement>('[data-action]')].find((el) => el.dataset.action === focusAction && el.dataset.id === focusId && el.dataset.peerId === focusPeer)?.focus({ preventScroll: true });
     }
@@ -262,7 +276,29 @@ function renderTransfers() {
         closeImagePreview();
     }
 }
+function transferInputs(item: TransferItem): unknown[] {
+    return [currentLocale(), item.id, item.status, item.peerId, item.peerName, item.groupId,
+        item.kind, item.name, item.mime, item.size, item.text, item.source, item.url, item.route,
+        item.reason, item.reasonKey, item.reasonParams, item.downloadStarted, item.imageCopied, item.copying,
+        feedback.unread.has(item.localId), connection.ready, state.peers.some(peer => peer.id === item.peerId && peer.online)];
+}
+function transferMeta(item: TransferItem) {
+    const status = { queued: t("app.queued"), waiting: t("app.waiting.to.connect"), transferring: `${Math.min(99, Math.floor(transferredBytes(item) / Math.max(item.size, 1) * 100))}%`, completed: item.incoming ? t("app.received") : t("app.delivered"), failed: t("app.failed"), cancelled: t("app.cancelled") }[item.status];
+    return `${item.incoming ? t("app.from") : t("app.to")} ${item.peerName} · ${sizeLabel(item.size)} · ${status}`;
+}
 function renderTransfer(item: TransferItem) {
+    const row = transferViews.get(item.localId, transferInputs(item), () => buildTransfer(item));
+    if (isActive(item)) {
+        text(query(row, '.qt-transfer-meta'), transferMeta(item));
+        updateMeter(query<HTMLProgressElement>(row, 'progress'), transferredBytes(item));
+        const metrics = row.querySelector<HTMLElement>('.qt-transfer-metrics');
+        if (metrics) {
+            updateProgressMetrics(metrics, [item]);
+        }
+    }
+    return row;
+}
+function buildTransfer(item: TransferItem) {
     const row = element('article', `qt-transfer-row${item.groupId ? '' : ' qt-transfer-card'}`);
     row.dataset.transfer = item.localId;
     row.dataset.status = item.status;
@@ -283,8 +319,7 @@ function renderTransfer(item: TransferItem) {
         }
         body.append(title);
     }
-    const status = { queued: t("app.queued"), waiting: t("app.waiting.to.connect"), transferring: `${Math.min(99, Math.floor(transferredBytes(item) / Math.max(item.size, 1) * 100))}%`, completed: item.incoming ? t("app.received") : t("app.delivered"), failed: t("app.failed"), cancelled: t("app.cancelled") }[item.status];
-    body.append(element('div', `qt-transfer-meta${item.status === 'failed' ? ' qt-error-note' : ''}`, `${item.incoming ? t("app.from") : t("app.to")} ${item.peerName} · ${sizeLabel(item.size)} · ${status}`));
+    body.append(element('div', `qt-transfer-meta${item.status === 'failed' ? ' qt-error-note' : ''}`, transferMeta(item)));
     if (item.reason) {
         body.append(element('div', 'qt-transfer-meta qt-error-note', messageText(item.reason, item.reasonKey, item.reasonParams)));
     }
@@ -338,8 +373,25 @@ function renderTransfer(item: TransferItem) {
     }
     return row;
 }
-function renderGroup(group: TransferGroup) {
-    const items = transfers.groupItems(group);
+function renderGroup(group: TransferGroup, items: TransferItem[]) {
+    const expanded = state.expandedGroups.has(group.id);
+    const row = groupViews.get(group.id, [group, expanded, ...items.flatMap(item => [item.localId, ...transferInputs(item)])], () => buildGroup(group, items));
+    for (const section of row.querySelectorAll<HTMLElement>('[data-device-progress]')) {
+        const peerItems = items.filter(item => item.peerId === section.dataset.deviceProgress);
+        const bytes = peerItems.reduce((sum, item) => sum + transferredBytes(item), 0);
+        const total = peerItems.reduce((sum, item) => sum + item.size, 0);
+        updateMeter(query<HTMLProgressElement>(section, ':scope > progress'), peerItems.every(item => item.status === 'completed') ? Math.max(total, 1) : bytes);
+        if (section.dataset.deviceState === 'transferring') {
+            text(query(section, '.qt-device-progress-state'), `${Math.min(99, Math.floor(bytes / Math.max(total, 1) * 100))}%`);
+        }
+        updateProgressMetrics(query(section, ':scope > .qt-transfer-metrics'), peerItems);
+        if (expanded) {
+            reconcileChildren(query(section, '.qt-group-files'), peerItems.sort((a, b) => a.sourceIndex - b.sourceIndex).map(renderTransfer));
+        }
+    }
+    return row;
+}
+function buildGroup(group: TransferGroup, items: TransferItem[]) {
     const completed = items.filter((item) => item.status === 'completed').length;
     const failed = items.filter((item) => item.status === 'failed');
     const active = items.filter(isActive);
@@ -407,8 +459,10 @@ function renderGroup(group: TransferGroup) {
         const files = element('div', 'qt-group-files');
         files.id = `group-${group.id}-${peer.id}-files`;
         files.hidden = !expanded;
-        for (const item of peerItems) {
-            files.append(renderTransfer(item));
+        if (expanded) {
+            for (const item of peerItems) {
+                files.append(renderTransfer(item));
+            }
         }
         section.append(files);
         details.append(section);

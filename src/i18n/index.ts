@@ -7,6 +7,7 @@ export type Locale = 'zh-CN' | 'en';
 export interface ClientConfig { defaultLocale: Locale; supportedLocales: Locale[]; cliDownloadUrl: string | null }
 let locale: Locale = 'en';
 const listeners = new Set<() => void>();
+const englishPlural = new Intl.PluralRules('en');
 export const currentLocale = () => locale;
 export function normalizeLocale(value: string | null | undefined): Locale | undefined {
   if (/^zh(?:-|$)/i.test(value || '')) {
@@ -26,8 +27,7 @@ export function translate(key: string, params: MessageParams = {}): string {
   }
   let message: string = (locale === 'en' ? en : zh)[key];
   if (locale === 'en') {
-    const plural = new Intl.PluralRules(locale);
-    message = message.replace(/\{(\w+)\} (files|devices|items|claims|minutes|recipients)/g, (match, name: string, noun: string) => plural.select(Number(params[name])) === 'one' ? `{${name}} ${noun.slice(0, -1)}` : match);
+    message = message.replace(/\{(\w+)\} (files|devices|items|claims|minutes|recipients)/g, (match, name: string, noun: string) => englishPlural.select(Number(params[name])) === 'one' ? `{${name}} ${noun.slice(0, -1)}` : match);
   }
   return message.replace(/\{(\w+)\}/g, (match, name: string) => String(params[name] ?? match));
 }
@@ -83,8 +83,8 @@ export function setLocale(next: Locale, persist = true): void {
     listener();
   }
 }
-export async function initI18n(): Promise<void> {
-  let config: ClientConfig = { defaultLocale: 'en', supportedLocales: ['zh-CN', 'en'], cliDownloadUrl: null };
+async function loadClientConfig(): Promise<void> {
+  const config: ClientConfig = { defaultLocale: 'en', supportedLocales: ['zh-CN', 'en'], cliDownloadUrl: null };
   try {
     const response = await fetch('/api/client-config', { signal: AbortSignal.timeout(3000), cache: 'no-store' });
     const data: unknown = await response.json();
@@ -98,6 +98,14 @@ export async function initI18n(): Promise<void> {
       }
     }
   } catch { /* The application can start with the built-in locales while offline. */ }
+  for (const link of document.querySelectorAll<HTMLAnchorElement>('[data-cli-download]')) {
+    link.hidden = !config.cliDownloadUrl;
+    if (config.cliDownloadUrl) {
+      link.href = config.cliDownloadUrl;
+    }
+  }
+}
+export function initI18n(): void {
   let saved: string | null = null;
   try {
     saved = localStorage.getItem('suichuan-locale');
@@ -108,10 +116,7 @@ export async function initI18n(): Promise<void> {
     select.addEventListener('change', () => setLocale(normalizeLocale(select.value) || 'en'));
     enhanceSelect(select);
   }
-  for (const link of document.querySelectorAll<HTMLAnchorElement>('[data-cli-download]')) {
-    link.hidden = !config.cliDownloadUrl;
-    if (config.cliDownloadUrl) {
-      link.href = config.cliDownloadUrl;
-    }
-  }
+  // Language selection is entirely local. Optional download configuration must
+  // not delay identity loading, WebSocket authentication or page interaction.
+  void loadClientConfig();
 }

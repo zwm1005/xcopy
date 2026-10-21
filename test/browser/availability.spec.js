@@ -127,6 +127,7 @@ test('queued share recipients receive verified files after the sender reconnects
       await page.goto(url);
       await page.locator('[data-claim]').click();
     }
+    await sender.page.locator('[data-share-record]').getByRole('button', { name: '查看详情', exact: true }).click();
     await expect(sender.page.locator('[data-claim-state="transferring"]')).toHaveCount(3);
     await expect(sender.page.locator('[data-claim-state="queued"]')).toHaveCount(1);
     // Wait for all three data channels before disconnecting only signaling.

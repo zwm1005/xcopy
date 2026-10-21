@@ -45,6 +45,8 @@ type task struct {
 	dc                   *webrtc.DataChannel
 	candidates           []webrtc.ICECandidateInit
 	started              bool
+	creating             bool
+	signals              chan any
 	descriptionPublished bool
 	bytes                atomic.Int64
 	sent                 atomic.Bool
@@ -71,6 +73,8 @@ type Engine struct {
 	results       map[string]json.RawMessage
 	root          *os.Root
 	partialPrefix string
+	pendingStarts int
+	pendingEvents []message
 }
 
 func newEngine(ctx context.Context, c Config, p Paths) (*Engine, error) {
@@ -143,7 +147,7 @@ func (e *Engine) run() {
 						e.finish(t, "failed", "传输超时，请重新发送", true)
 					} else {
 						w, id := e.wire, t.WireID
-						if w != nil {
+						if w != nil && id != "" {
 							go w.call("transfer.progress", map[string]any{"id": id}, nil)
 						}
 					}
@@ -197,6 +201,7 @@ func (e *Engine) network() {
 						e.wire = nil
 						e.lastError = "连接中断，正在重连"
 						e.requests = map[string]json.RawMessage{}
+						e.pendingEvents = nil
 						for _, t := range e.tasks {
 							if !terminal(t.Status) {
 								e.finish(t, "failed", "连接中断，请重新发送", false)
@@ -224,6 +229,21 @@ func (e *Engine) network() {
 }
 
 func (e *Engine) event(m message) {
+	// The peer can accept before the asynchronous creation result gets its turn
+	// on the engine loop. Hold these events until the task has its wire ID/PC.
+	if e.pendingStarts > 0 && (m.Type == "transfer.accepted" || m.Type == "signal" || m.Type == "transfer.state") {
+		var data struct {
+			ID string `json:"id"`
+		}
+		if json.Unmarshal(m.Data, &data) == nil && data.ID != "" && e.byWire(data.ID) == nil {
+			if len(e.pendingEvents) >= 256 {
+				_ = e.wire.ws.Close()
+				return
+			}
+			e.pendingEvents = append(e.pendingEvents, m)
+			return
+		}
+	}
 	switch m.Type {
 	case "peers":
 		var data struct {
@@ -423,9 +443,11 @@ func (e *Engine) pump() {
 	if e.wire == nil || e.ctx.Err() != nil {
 		return
 	}
-	count := 0
+	// A cancelled creation may already be evicted from history, but its RPC
+	// still occupies a slot until the response can retire the remote task.
+	count := e.pendingStarts
 	for _, t := range e.tasks {
-		if !t.Incoming && t.Status != "queued" && !terminal(t.Status) {
+		if !t.creating && !t.Incoming && t.Status != "queued" && !terminal(t.Status) {
 			count++
 		}
 	}
@@ -438,22 +460,60 @@ func (e *Engine) pump() {
 		}
 		count++
 		t.Status = "connecting"
+		t.creating = true
 		t.activity.Store(time.Now().UnixNano())
+		t.ctx, t.cancel = context.WithCancel(e.ctx)
+		e.pendingStarts++
+		e.startTask(t)
+	}
+}
+
+func (e *Engine) startTask(t *task) {
+	w, ctx := e.wire, t.ctx
+	data := map[string]any{"peerId": t.PeerID, "metadata": t.Metadata}
+	go func() {
 		var started struct {
 			ID         string             `json:"id"`
 			ICEServers []webrtc.ICEServer `json:"iceServers"`
 			ForceRelay bool               `json:"forceRelay"`
 		}
-		err := e.wire.call("transfer.start", map[string]any{"peerId": t.PeerID, "metadata": t.Metadata}, &started)
-		if err == nil {
-			t.WireID = started.ID
-			err = e.makePC(t, started.ICEServers, started.ForceRelay)
-		}
-		if err != nil {
-			e.finish(t, "failed", err.Error(), true)
-			count--
-		}
-	}
+		err := w.callRetrying(ctx, "transfer.start", data, &started)
+		e.post(func() {
+			t.creating = false
+			e.pendingStarts--
+			if err == nil && started.ID == "" {
+				err = fmt.Errorf("服务器返回的传输 ID 无效")
+			}
+			if terminal(t.Status) || e.wire != w || e.ctx.Err() != nil {
+				if err == nil {
+					go w.call("transfer.end", map[string]any{"id": started.ID, "status": "cancelled"}, nil)
+				}
+			} else {
+				if err == nil {
+					t.WireID = started.ID
+					err = e.makePC(t, started.ICEServers, started.ForceRelay)
+				}
+				if err != nil {
+					e.finish(t, "failed", err.Error(), true)
+				}
+			}
+			pending := e.pendingEvents
+			e.pendingEvents = nil
+			for _, event := range pending {
+				var data struct {
+					ID string `json:"id"`
+				}
+				_ = json.Unmarshal(event.Data, &data)
+				if data.ID == started.ID {
+					if !terminal(t.Status) && e.wire == w {
+						e.event(event)
+					}
+				} else if e.pendingStarts > 0 {
+					e.pendingEvents = append(e.pendingEvents, event)
+				}
+			}
+		})
+	}()
 }
 
 func (e *Engine) finish(t *task, status, reason string, notify bool) {

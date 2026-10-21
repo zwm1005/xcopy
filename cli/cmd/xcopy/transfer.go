@@ -123,7 +123,31 @@ func (e *Engine) makePC(t *task, servers []webrtc.ICEServer, relay bool) error {
 		return err
 	}
 	t.pc = pc
-	t.ctx, t.cancel = context.WithCancel(e.ctx)
+	if t.ctx == nil {
+		t.ctx, t.cancel = context.WithCancel(e.ctx)
+	}
+	t.signals = make(chan any, 128)
+	w, id, ctx, signals := e.wire, t.WireID, t.ctx, t.signals
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case signal := <-signals:
+				if ctx.Err() != nil {
+					return
+				}
+				if w == nil {
+					return
+				}
+				err := w.call("signal", map[string]any{"id": id, "signal": signal}, nil)
+				if err != nil && !strings.HasPrefix(err.Error(), "TRANSFER_ENDED:") && !strings.HasPrefix(err.Error(), "NOT_FOUND:") {
+					e.post(func() { e.finish(t, "failed", err.Error(), true) })
+					return
+				}
+			}
+		}
+	}()
 	pc.OnICECandidate(func(candidate *webrtc.ICECandidate) {
 		if candidate == nil {
 			return
@@ -233,16 +257,17 @@ func usableDescription(description *webrtc.SessionDescription, policy webrtc.ICE
 }
 
 func (e *Engine) signal(t *task, signal any) error {
-	if e.wire == nil {
+	if e.wire == nil || t.signals == nil {
 		return fmt.Errorf("服务器未连接")
 	}
-	err := e.wire.call("signal", map[string]any{"id": t.WireID, "signal": signal}, nil)
-	// ICE gathering can finish after the receiver has acknowledged the bytes.
-	// Let the ACK/state event decide the result instead of failing a late candidate.
-	if err != nil && (strings.HasPrefix(err.Error(), "TRANSFER_ENDED:") || strings.HasPrefix(err.Error(), "NOT_FOUND:")) {
+	// One bounded queue per transfer preserves SDP/candidate order without
+	// making other transfers or local commands wait for an RPC response.
+	select {
+	case t.signals <- signal:
 		return nil
+	default:
+		return fmt.Errorf("协商消息过多，请重新发送")
 	}
-	return err
 }
 
 func (e *Engine) offer(data json.RawMessage) {
@@ -271,7 +296,12 @@ func (e *Engine) offer(data json.RawMessage) {
 		err = e.makePC(t, offer.ICEServers, offer.ForceRelay)
 	}
 	if err == nil {
-		err = e.wire.call("transfer.accept", map[string]any{"id": t.WireID}, nil)
+		w, id := e.wire, t.WireID
+		go func() {
+			if err := w.call("transfer.accept", map[string]any{"id": id}, nil); err != nil {
+				e.post(func() { e.finish(t, "failed", err.Error(), true) })
+			}
+		}()
 	}
 	if err != nil {
 		e.finish(t, "failed", err.Error(), true)

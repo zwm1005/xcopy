@@ -29,7 +29,7 @@ test('explicit opt-in injects only same-origin configuration and bilingual discl
   try {
     for (const path of ['/', '/transfer', '/s']) {
       const html = await (await fetch(origin + path)).text();
-      assert.match(html, /src="\/analytics.js" data-analytics-base="\/api\/analytics"/);
+      assert.match(html, /src="\/analytics.js\?v=[a-f0-9]{64}" data-analytics-base="\/api\/analytics"/);
       assert.match(html, /href="\/analytics-privacy"/);
       assert.doesNotMatch(html, /X-Analytics-Proxy-Key|HMAC_KEY/);
     }

@@ -65,9 +65,10 @@ test('群发固定配对名单，10 个文件和文字共 22 项有界传输，�
     await a.locator('[data-action="send"]').click();
     const group = a.locator('[data-group]');
     await expect(group).toHaveCount(1);
+    await expect(group.locator('[data-transfer]')).toHaveCount(0);
+    await group.locator('[data-action="toggle-group"]').click();
     await expect(group.locator('[data-status="transferring"]')).toHaveCount(3);
     await expect(group.locator('[data-status="queued"]')).toHaveCount(19);
-    await group.locator('[data-action="toggle-group"]').click();
     await expect(group.locator('[data-group-details]')).toBeVisible();
     await a.locator('[data-action="devices"]').click();
     await expect(a.locator('[data-action="forget"]').first()).toBeDisabled();
@@ -133,6 +134,7 @@ test('群发失败重试只发送失败设备，成功设备不重复接收', as
     await a.locator('[data-editor]').fill('失败重试内容');
     await a.locator('[data-action="send"]').click();
     const group = a.locator('[data-group]');
+    await group.locator('[data-action="toggle-group"]').click();
     await expect(group.locator('[data-status="completed"]')).toHaveCount(1);
     await expect(group.locator('[data-status="failed"]')).toHaveCount(1);
     await group.locator('[data-action="retry-group"]').click();
@@ -161,6 +163,7 @@ test('取消群发停止排队和活跃任务，随后可忘记配对', async ({
     await a.locator('[data-files]').setInputFiles(Array.from({ length: 8 }, (_, index) => ({ name: `cancel-${index}.bin`, mimeType: 'application/octet-stream', buffer: Buffer.alloc(1024) })));
     await a.locator('[data-action="send"]').click();
     const group = a.locator('[data-group]');
+    await group.locator('[data-action="toggle-group"]').click();
     await expect(group.locator('[data-status="transferring"]')).toHaveCount(3);
     await group.locator('[data-action="cancel-group"]').click();
     await expect(group.locator('[data-status="cancelled"]')).toHaveCount(18);

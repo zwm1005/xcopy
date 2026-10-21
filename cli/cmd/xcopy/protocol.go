@@ -100,8 +100,17 @@ func connect(ctx context.Context, server string, event func(message)) (*wire, er
 }
 
 func (w *wire) call(kind string, data any, result any) error {
+	return w.callRetrying(context.Background(), kind, data, result)
+}
+
+func (w *wire) callRetrying(ctx context.Context, kind string, data any, result any) error {
 	deadline := time.Now().Add(30 * time.Second)
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		// Keep an already submitted request alive until its bounded reply arrives.
+		// A cancelled creation needs that reply's ID to retire its remote task.
 		err := w.callOnce(kind, data, result)
 		var remote *rpcError
 		if kind != "transfer.start" || !errors.As(err, &remote) || remote.Code != "RATE_LIMIT" || remote.RetryAfterMS <= 0 || remote.RetryAfterMS > 30000 {
@@ -113,6 +122,9 @@ func (w *wire) call(kind string, data any, result any) error {
 		}
 		timer := time.NewTimer(delay)
 		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
 		case <-w.done:
 			timer.Stop()
 			return fmt.Errorf("服务器连接中断")

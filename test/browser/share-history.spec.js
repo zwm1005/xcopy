@@ -28,9 +28,12 @@ test('share history loads older pages in order without duplicates after resumpti
     }
     await page.evaluate(() => window.historyComposer.connection.ws.close());
     await expect(page.locator('[data-share-record]')).toHaveCount(20);
+    await expect(page.locator('[data-share-record] .share-record-details > *')).toHaveCount(0);
+    await page.locator('[data-share-record]').first().getByRole('button', { name: '查看详情', exact: true }).click();
     await expect(page.locator('[data-share-record]').first()).toContainText('history-25.txt');
     await page.getByRole('button', { name: '加载更多分享记录', exact: true }).click();
     await expect(page.locator('[data-share-record]')).toHaveCount(26);
+    await page.locator('[data-share-record]').last().getByRole('button', { name: '查看详情', exact: true }).click();
     await expect(page.locator('[data-share-record]').last()).toContainText('history-0.txt');
     const ids = await page.locator('[data-share-record]').evaluateAll((nodes) => nodes.map((node) => node.dataset.shareRecord));
     expect(new Set(ids).size).toBe(26);

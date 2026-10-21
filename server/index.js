@@ -1,4 +1,5 @@
 import { assets } from './assets.js';
+import { staticFiles, representation, sendRepresentation } from './static.js';
 import { analyticsMarkup, analyticsPrivacy } from './analytics.js';
 import { discovery, pageMetadata } from './discovery.js';
 import { pageLocale } from './page-html.js';
@@ -6,7 +7,6 @@ import { messageDescriptor } from './messages.js';
 import { assertFrontend } from '../scripts/frontend-artifact.js';
 import { createServer } from 'node:http';
 import { createHash, createPublicKey, randomBytes, randomInt, verify } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, extname } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -44,6 +44,8 @@ function cleanName(value) {
 
 export function createApp(overrides = {}) {
   const config = { ...loadConfig(), ...overrides };
+  const staticContent = staticFiles(publicDir);
+  const responses = new Map();
   const resolveSource = clientSource(config);
   const now = overrides.now || Date.now;
   const store = new Store(config.dbPath, now());
@@ -546,15 +548,29 @@ export function createApp(overrides = {}) {
       return;
     }
     try {
-      const content = await readFile(resolve(publicDir, `.${file}`));
-      if (['/index.html', '/transfer.html', '/share.html'].includes(file)) {
-        res.setHeader('Content-Language', pageLocale(req.url, config, req.headers['accept-language']));
+      const html = ['/index.html', '/transfer.html', '/share.html'].includes(file);
+      const locale = html ? pageLocale(req.url, config, req.headers['accept-language']) : '';
+      if (html) {
+        res.setHeader('Content-Language', locale);
         res.setHeader('Vary', 'Accept-Language');
       }
       if (['/transfer.html', '/share.html'].includes(file)) {
         res.setHeader('X-Robots-Tag', file === '/share.html' ? 'noindex, nofollow' : 'noindex, follow');
       }
-      res.writeHead(200, { 'Content-Type': mimeTypes[extname(file)] || 'text/plain; charset=utf-8' }).end(req.method === 'HEAD' ? undefined : analyticsMarkup(pageMetadata(content, file, config, req.url, req.headers['accept-language']), file, config));
+      const key = `${file}:${locale}`;
+      if (!responses.has(key)) {
+        responses.set(key, (async () => {
+          const content = await staticContent.load(file);
+          const localized = html ? await staticContent.versionHtml(analyticsMarkup(pageMetadata(content, file, config, req.url, req.headers['accept-language']), file, config)) : content;
+          return representation(localized);
+        })().catch((error) => {
+          responses.delete(key);
+          throw error;
+        }));
+      }
+      const value = await responses.get(key);
+      res.setHeader('Content-Type', mimeTypes[extname(file)] || 'text/plain; charset=utf-8');
+      sendRepresentation(req, res, value, { cache: !html, version: new URL(req.url, config.origin).searchParams.get('v') });
     } catch {
       res.writeHead(500).end('Service unavailable');
     }
