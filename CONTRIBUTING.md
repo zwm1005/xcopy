@@ -172,6 +172,8 @@ docker compose -f compose.yaml -f compose.turn.yaml up -d --no-deps --force-recr
 
 `share.list` 默认 20 条，`limit` 范围 1–50，响应最多 512 KiB，返回 `nextCursor` / `hasMore`。游标绑定发送会话及查询时的历史上界，重连恢复会话后继续有效；其他标签页即使是同一设备也不能读取。`requestId` 可精确恢复创建结果，不能与分页参数混用。网页提供“加载更多分享记录”。列表单独受设备 `SHARE_LIST_RATE_PER_MINUTE=30` / `SHARE_LIST_BURST=5`、来源 `SHARE_LIST_IP_RATE_PER_MINUTE=120` / `SHARE_LIST_IP_BURST=20` 限制。旧客户端无参数调用只得到首页。
 
+活动分享全局最多 2000 条，每个发送页面同时最多一个；停止接收新领取但仍在处理已领取任务的分享继续占用活动名额。已结束分享不占用活动名额，历史独立最多保留 2000 条，并在结束一小时后清理；超过容量时按结束时间淘汰最旧记录。淘汰会同时删除分享链接、列表索引及 `requestId` 索引，不影响活动分享。分页游标可以继续读取尚保留的记录，已淘汰历史不会再次出现；`requestId` 的查询和创建重试仅在记录仍保留时恢复原结果。
+
 新身份在签名和连接配额校验通过后计入注册预算：来源 `DEVICE_REGISTER_IP_RATE_PER_MINUTE=5` / `DEVICE_REGISTER_IP_BURST=10`，全局 `DEVICE_REGISTER_GLOBAL_RATE_PER_MINUTE=30` / `DEVICE_REGISTER_GLOBAL_BURST=60`。已有设备认证不消耗注册预算。`DEVICES_MAX_RECORDS=100000` 为硬上限，达到时只拒绝新设备，已有身份、配对和接收仍可用；上线前应确认当前数量低于所选上限。
 
 自动迁移只新增 `device_activity` 表及索引、触发器，保留 `devices` 四列结构。现有记录从迁移日获得完整保留期；认证和每 5 分钟在线批次更新活跃时间。默认 `DEVICE_CLEANUP_ENABLED=0`；启用后每分钟最多检查 500 条、删除超过 `DEVICE_UNPAIRED_RETENTION_DAYS=30` 天未活跃且无配对的记录，保护在线、重连宽限及未结束传输参与者。清理不会撤销配对。
